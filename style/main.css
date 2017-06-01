@@ -1,0 +1,42 @@
+
+.ui-li-static.ui-collapsible > .ui-collapsible-heading {
+    margin: 0;
+}
+.ui-li-static.ui-collapsible {
+    padding: 0;
+}
+.ui-li-static.ui-collapsible > .ui-collapsible-heading > .ui-btn {
+    border-top-width: 0;
+}
+.ui-li-static.ui-collapsible > .ui-collapsible-heading.ui-collapsible-heading-collapsed > .ui-btn,
+.ui-li-static.ui-collapsible > .ui-collapsible-content {
+    border-bottom-width: 0;
+}
+
+#nearby-post-page-content{
+    padding: 0px;
+}
+
+#nearby-post-page-content h2{
+    margin-top: 10px;
+    margin-bottom: 16px;
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+
+.nearby-post-image{
+    margin-top: -16px;
+    width: 100%;
+}
+
+.nearby-post-text{
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+#nearby-mp3-controls{
+    text-align: center;
+}
+
+#map-page, #map-canvas { width: 100%; height: 100%; padding: 0; }
