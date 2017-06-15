@@ -1,11 +1,22 @@
 
 // namespace object
 var rbgeNearby = {};
-rbgeNearby.root_url = 'https://stories.rbge.org.uk/';
+
+// two vars vary for dev
+var is_live = true;
+if(is_live){
+    rbgeNearby.root_url = 'https://stories.rbge.org.uk/';
+    rbgeNearby.location_ok_accuracy = 200; // this will do to stop the retrieving location
+}else{
+    rbgeNearby.root_url = 'https://192.168.7.144/';
+    rbgeNearby.location_ok_accuracy = 200; // this will do to stop the retrieving location
+}
+
+
 rbgeNearby.location_current = false;
 rbgeNearby.location_error = false;
 rbgeNearby.location_inaccurate = false;
-rbgeNearby.location_ok_accuracy = 20; // this will do to stop the retrieving location
+
 rbgeNearby.location_watcher = false; // the watcher reporting the location (when running)
 rbgeNearby.location_timer = false; // a timer that will stop the location_watcher after a set period
 
@@ -19,6 +30,8 @@ rbgeNearby.last_refresh = 0;
 rbgeNearby.map = false;
 rbgeNearby.map_post_markers = new Array();
 rbgeNearby.map_person_marker = false;
+rbgeNearby.map_display_all = false; // whether map displays current marker or all available.
+
 rbgeNearby.person_icon_on = {  
         path: google.maps.SymbolPath.CIRCLE,
         fillColor: '#0000ff',
@@ -45,12 +58,19 @@ rbgeNearby.beacons = {};
 rbgeNearby.beacon_current = false;
 rbgeNearby.beacon_found_timestamp = -1;
 
-
 /*
     Main index page where poi are listed.
 */
 $(document).on("pagecreate","#index-page",function(){ 
+   
    $('#nearby-refresh-button').on('click', rbgeNearby.refresh);
+   
+   $("#index-page-map-button").on('click', function(){
+       rbgeNearby.map_display_all = true;
+   });
+   
+   // listen to taps on the location message
+   $('#nearby-status-message').on('click', rbgeNearby.tagLocation);
    
    // can't pick categories till we load something
    $('#nearby-cats-li').addClass('ui-disabled');
@@ -78,6 +98,15 @@ $(document).on("pageshow","#index-page",function(){
 $(document).on("pagecreate","#about-page",function(){ 
   
    
+});
+
+$(document).on("pagecreate","#post-page",function(){ 
+    $("#post-page-map-button").on('click', function(){
+        rbgeNearby.map_display_all = false; // only display one item on the map
+    });
+    $("#post-page-back-button").on('click', function(){
+        rbgeNearby.map_display_all = true; // if we are heading back to a map possibly
+    });
 });
 
 /*
@@ -112,7 +141,7 @@ $(document).on("pagebeforeshow","#post-page",function(){
         start.on('click', rbgeNearby.toggleAudio);
         fieldset.append(start);
         
-        var back = $('<a href="#" id="nearby-audio-back-btn" class="ui-btn ui-icon-carat-l ui-btn-icon-left">Back 20\'</a>');
+        var back = $('<a href="#" id="nearby-audio-back-btn" class="ui-btn ui-icon-carat-l ui-btn-icon-left">Back 20"</a>');
         back.on('click', rbgeNearby.skipBackAudio);
         fieldset.append(back);
 
@@ -132,6 +161,14 @@ $(document).on("pagebeforeshow","#post-page",function(){
     
     pp.enhanceWithin();
     
+    // we also turn the map button on/off depending on if this thing is mappable or not
+    if(post.latitude && post.longitude){
+        $('#post-page-map-button').removeClass('ui-disabled');
+    }else{
+        $('#post-page-map-button').addClass('ui-disabled');
+    }
+    
+    
 });
 
 $(document).on("pagehide","#post-page",function(){
@@ -150,15 +187,28 @@ $(document).on("pageshow","#map-page",function(){
     
     // we have two very different approaches depending on if there is a current 
     // post present or not
-    console.log("map page show");
-    console.log(rbgeNearby.post_current);
-    if(rbgeNearby.post_current) rbgeNearby.initMapForPost();
-    else rbgeNearby.initMapForMultiplePosts();
+    if(rbgeNearby.map_display_all) rbgeNearby.initMapForMultiplePosts();
+    else rbgeNearby.initMapForPost();
     
 });
 
 $(document).on("pagehide","#map-page",function(){
     rbgeNearby.stopTracking();
+});
+
+
+/*
+ -- tag page
+*/
+
+$(document).on( "pagecreate", "#tag-page", function() {
+    $('#nearby-tag-reset-btn').on('click', rbgeNearby.resetTagForm);
+    $('#nearby-tag-save-btn').on('click', rbgeNearby.submitTagForm);
+});
+
+$(document).on("pagebeforeshow","#tag-page",function(){
+    $('#email').val(localStorage.getItem("email"));
+    $('#memorable-word').val(localStorage.getItem("memorable-word"));
 });
 
 
@@ -171,6 +221,7 @@ rbgeNearby.refresh = function(){
     $('#nearby-cats-li').addClass('ui-disabled'); 
     $('#nearby-cats-list').empty();
     $('#nearby-intro-block').hide();
+    $('#index-page-map-button').addClass('ui-disabled');
     
     rbgeNearby.startBeaconScan();
     
@@ -454,11 +505,13 @@ rbgeNearby.initMapForMultiplePosts = function(){
     // add markers for all the gps posts we have
     rbgeNearby.clearMapPostMarkers();
     
-    for (var i=0; i <  rbgeNearby.posts_data_gps.posts.length; i++) {
-        var post =  rbgeNearby.posts_data_gps.posts[i];
-        var post_pos = new google.maps.LatLng(post.latitude, post.longitude);
-        bounds.extend(post_pos);
-        rbgeNearby.addMapPostMarker(post);
+    if(rbgeNearby.posts_data_gps.posts){
+        for (var i=0; i <  rbgeNearby.posts_data_gps.posts.length; i++) {
+            var post =  rbgeNearby.posts_data_gps.posts[i];
+            var post_pos = new google.maps.LatLng(post.latitude, post.longitude);
+            bounds.extend(post_pos);
+            rbgeNearby.addMapPostMarker(post);
+        }
     }
     
     // FIXME - THIS NEEDS TO DETECT DUPLICATES IN BEACON AND GPS RESULTS
@@ -511,7 +564,23 @@ rbgeNearby.addMapPostMarker = function(post){
     var marker = new google.maps.Marker({
         position: post_pos,
         map: rbgeNearby.map,
-        title: post.title
+        title: post.title,
+        nearby_post: post
+    });
+    
+    marker.addListener('click', function() {
+        
+        console.log(this['nearby_post']);
+        
+        // set it as the current post
+        rbgeNearby.post_current = this['nearby_post'];
+        
+        
+        // change to the post view page (always backwards?) forwards if it is multiple markers
+        $( ":mobile-pagecontainer" ).pagecontainer( "change", "#post-page", { transition: "slide" } );
+        
+        
+        
     });
     
     rbgeNearby.map_post_markers.push(marker);
@@ -563,8 +632,6 @@ rbgeNearby.updateDisplayGps = function(){
 
         var post =  rbgeNearby.posts_data_gps.posts[i];
         
-        console.log(post.id + ' ' + post.title);
-     
         if($('*[data-nearby-post-id="'+ post.id +'"]').length > 0) continue;
 
         var li = $('<li></li>');
@@ -600,12 +667,16 @@ rbgeNearby.updateDisplayGps = function(){
         // add in a direction
         var bearing = ''
         if(d > 0){
+            
             bearing = rbgeNearby.getBearing(rbgeNearby.location_current.latitude, rbgeNearby.location_current.longitude, post.latitude, post.longitude );
             if (bearing < 45) bearing = 'North'; 
             else if(bearing < 135) bearing = 'East';
             else if(bearing < 225) bearing = 'South';
             else if(bearing < 315) bearing = 'West';
             else bearing = 'North';
+            
+            // this is mapable so turn the mapping button on
+            $('#index-page-map-button').removeClass('ui-disabled');
 
         }
         
@@ -924,10 +995,10 @@ rbgeNearby.toRad = function(deg) {
 
 rbgeNearby.toggleAudio = function(){
     
-    console.log('toggle');
-        
+    $('#nearby-audio-start-btn').blur();
+    
     if($('#nearby-audio').data('playing')){
-        rbgeNearby.stopAudio();
+        rbgeNearby.pauseAudio();
     }else{
         rbgeNearby.startAudio();
     }
@@ -936,11 +1007,8 @@ rbgeNearby.toggleAudio = function(){
 
 rbgeNearby.startAudio = function(){
    
-    if(window.cordova){
-        rbgeNearby.startAudioCordova();
-    }else{
-        rbgeNearby.startAudioBrowser();
-    }
+    $('#nearby-audio')[0].play();
+    
     // set the started flag
     $('#nearby-audio').data('playing', true);
     
@@ -948,69 +1016,11 @@ rbgeNearby.startAudio = function(){
     $('#nearby-audio-start-btn').removeClass('ui-icon-audio').addClass('ui-icon-minus');
     $('#nearby-audio-start-btn').html('Stop');
     
-//    active_li.addClass('stop-state');
- //   active_li.attr('data-icon', 'minus');
- //   active_li.find('a').removeClass('ui-icon-audio').addClass('ui-icon-minus');
-    
- //   $('#index-page div[data-role="footer"]').slideDown();
-    
 }
 
-rbgeNearby.startAudioCordova = function(){
-     
-    // we need to be careful not to create an extra media player
-    // if it is undefined or false then go for it
-   if (rbgeNearby.media_player == false){
-       
-       rbgeNearby.media_player = new Media(media_url,
-
-           // success callback -- called at the end of playback
-           function () {
-               rbgeNearby.media_player.release();
-               stopAudio();
-               rbgeNearby.media_player = false;
-           },
-
-           // error callback
-           function (err) {
-             rbgeNearby.media_player.release();
-             if (err.code == MediaError.MEDIA_ERR_ABORTED) console.log("playAudio():Audio Error: MediaError.MEDIA_ERR_ABORTED");
-             if (err.code == MediaError.MEDIA_ERR_NETWORK) console.log("playAudio():Audio Error: MediaError.MEDIA_ERR_NETWORK");
-             if (err.code == MediaError.MEDIA_ERR_DECODE) console.log("playAudio():Audio Error: MediaError.MEDIA_ERR_DECODE");
-             if (err.code == MediaError.MEDIA_ERR_NONE_SUPPORTED) console.log("playAudio():Audio Error: MediaError.MEDIA_ERR_NONE_SUPPORTED");
-             rbgeNearby.media_player = false;
-           },
-           
-           // status callback
-           function (status){
-               rbgeNearby.media_player_status = status;
-           }
-           
-       );
-       
-       try{
-           rbgeNearby.media_player.play();
-       }catch(err){
-           rbgeNearby.media_player = false;
-       }
-       
-   } // check it doesn't already exist
+rbgeNearby.pauseAudio = function(){
     
-    
-}
-
-rbgeNearby.startAudioBrowser = function(){
-    $('#nearby-audio')[0].play();
-}
-
-rbgeNearby.stopAudio = function(){
-    
-    // actually stop the audio
-    if(window.cordova){
-        rbgeNearby.stopAudioCordova();
-    }else{
-        rbgeNearby.stopAudioBrowser();
-    }
+    $('#nearby-audio')[0].pause();
     
     // set the stop
     $('#nearby-audio').data('playing', false);
@@ -1019,61 +1029,87 @@ rbgeNearby.stopAudio = function(){
     $('#nearby-audio-start-btn').removeClass('ui-icon-minus').addClass('ui-icon-audio');
     $('#nearby-audio-start-btn').html('Start');
     
-
 }
 
-rbgeNearby.stopAudioCordova = function(){
-     if(rbgeNearby.media_player){
-         rbgeNearby.media_player.stop();
-     }
-}
-
-rbgeNearby.stopAudioBrowser = function(){
-     $('#nearby-audio')[0].pause();
+rbgeNearby.stopAudio = function(){
+    $('#nearby-audio')[0].pause();
+    $('#nearby-audio').data('playing', false);
 }
 
 rbgeNearby.skipBackAudio = function(){
-    // actually stop the audio
-   if(window.cordova){
-       rbgeNearby.skipBackAudioCordova();
-   }else{
-       rbgeNearby.skipBackAudioBrowser();
-   }
     
-}
-
-rbgeNearby.skipBackAudioBrowser = function(){
+    $('#nearby-audio-back-btn').blur();
     
     if($('#nearby-audio')[0].currentTime > 20){
         $('#nearby-audio')[0].currentTime = $('#nearby-audio')[0].currentTime - 20;
     }else{
         $('#nearby-audio')[0].currentTime = 0;
     }
-
-}
-
-rbgeNearby.skipBackAudioCordova = function(){
-    // FIXME - not implemented yet
-}
-
-rbgeNearby.restartAudio = function(){
-    // actually stop the audio
-   if(window.cordova){
-       rbgeNearby.restartAudioCordova();
-   }else{
-       rbgeNearby.restartAudioBrowser();
-   }
     
 }
 
-rbgeNearby.restartAudioBrowser = function(){
+rbgeNearby.restartAudio = function(){
+    $('#nearby-audio-restart-btn').blur();
     $('#nearby-audio')[0].currentTime = 0;
 }
 
-rbgeNearby.restartAudioCordova = function(){
-    // FIXME -  not implemented yet
+/*
+    ------ T A G G I N G - P L A C E -----------
+*/
+
+rbgeNearby.tagLocation = function(){
+    
+    // we do nothing if there is no location
+    if(!rbgeNearby.location_current) return;
+    
+    // we have a location so lets show them the location page.
+    $( ":mobile-pagecontainer" ).pagecontainer( "change", "#tag-page", { transition: "flip" } );
+    
+    
 }
 
+rbgeNearby.resetTagForm = function(){
+    
+    $('#email').val(localStorage.getItem("email"));
+    $('#memorable-word').val(localStorage.getItem("memorable-word"));
+    $('#soothed-slider').val(5).slider("refresh");
+    $('#anxious-slider').val(5).slider("refresh");
+    $('#excited-slider').val(5).slider("refresh");
+    $('#comments').val('');
+    
+}
+
+rbgeNearby.submitTagForm = function(){
+    
+    // firstly save the persistent values save them reentering 
+    localStorage.setItem("email", $('#email').val());
+    localStorage.setItem("memorable-word", $('#memorable-word').val());
+    
+    // get a nice key:val array of the form
+    var formArray = $('#tag-location-form').serializeArray()
+    var returnArray = {};
+    for (var i = 0; i < formArray.length; i++){
+        returnArray[formArray[i]['name']] = formArray[i]['value'];
+    }
+    
+    returnArray.latitude = rbgeNearby.location_current.latitude;
+    returnArray.longitude = rbgeNearby.location_current.longitude;
+    returnArray.accuracy = rbgeNearby.location_current.accuracy;
+    returnArray.timestamp = Math.floor(Date.now());
+
+    returnArray.beacon = rbgeNearby.beacon_current.name;
+    
+    $.post(rbgeNearby.root_url + "wp-json/rbge_geo_tag/v1/tag", returnArray).done(
+    
+        function(data){alert(data), console.log(data)
+            
+    });
+    
+    console.log(returnArray);
+    
+    $( ":mobile-pagecontainer" ).pagecontainer( "change", "#index-page", { transition: "flip" } );
+    
+}
 
 rbgeNearby.compassHeading = function( alpha, beta, gamma ) {
 

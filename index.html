@@ -46,8 +46,8 @@
         
         <div data-role="header" data-position="fixed" data-tap-toggle="false" >
             <a href="#about-page" data-transition="slide" data-direction="reverse" data-icon="info" >About</a>
-            <h1>Nearby</h1>
-            <a href="#map-page" data-transition="slide" data-icon="location" data-iconpos="right" >Map</a>
+            <h1>Home</h1>
+            <a href="#map-page" id="index-page-map-button" data-transition="slide" data-icon="location" data-iconpos="right" >Map</a>
         </div><!-- /header -->
     
         <div data-role="main" class="ui-content" >
@@ -67,7 +67,7 @@
                 <div class="ui-body ui-body-a">
                     <p><strong>Botanics Nearby</strong> will tell you what's around you whilst you're in the garden.</p>
                     <p>Tap the 'Nearby' button on the bottom right of this screen to load content for your current location.</p>
-                    <p>Once you have updated your location you can select a topic of information that particularly interests you.</p>
+                    <p>Once you have updated your location you can select a topic of that particularly interests you.</p>
                     <p>To learn more about the app tap the 'About' button on the top left.</p>
                 </div>
             </div>
@@ -87,23 +87,12 @@
     <!--  P O S T  P A G E   -->
     <div data-role="page" id="post-page" data-theme="a" >
         <div data-role="header" data-position="fixed" >
-            <a href="#index-page" data-transition="slide" data-icon="bullets" data-iconpos="left" data-direction="reverse" >Nearby</a>
+            <!-- <a href="#index-page" data-transition="slide" data-icon="bullets" data-iconpos="left" data-direction="reverse" >Nearby</a> -->
+            <a href="#" id="post-page-back-button" data-rel="back" data-transition="slide" data-icon="back" data-iconpos="left" data-direction="reverse" >Back</a>
             <h1>Point</h1>
-            <a href="#map-page" data-transition="slide" data-icon="location" data-iconpos="right"  >Map</a>
+            <a href="#map-page" id="post-page-map-button" data-transition="slide" data-icon="location" data-iconpos="right"  >Map</a>
         </div><!-- /header -->
         <div id="nearby-post-page-content" data-role="content" data-theme="c" >
-            <form>
-            <fieldset data-role="controlgroup" data-type="horizontal">
-            <legend>Horizontal:</legend>
-            <input type="radio" name="radio-choice-h-2" id="radio-choice-h-2a" value="on" checked="checked">
-            <label for="radio-choice-h-2a">One</label>
-            <input type="radio" name="radio-choice-h-2" id="radio-choice-h-2b" value="off">
-            <label for="radio-choice-h-2b">Two</label>
-            <input type="radio" name="radio-choice-h-2" id="radio-choice-h-2c" value="other">
-            <label for="radio-choice-h-2c">Three</label>
-            </fieldset>
-            </form>
-            
         </div>
     </div>
     
@@ -125,18 +114,89 @@
     <div data-role="page" id="about-page" data-theme="a" >
         <div data-role="header" data-position="fixed" >
             <h1>About</h1>
-            <a href="#index-page" data-transition="slide" data-icon="bullets" data-iconpos="right" class="ui-btn-right" >Nearby</a>
+            <a href="#index-page" data-transition="slide" data-icon="home" data-iconpos="right" class="ui-btn-right" >Home</a>
         </div><!-- /header -->
         <div data-role="content" data-theme="a" >
             
-                <h3>Botanics Nearby</h3>
-                <p>This is an idea under development. It feeds geo tagged stories from Botanics Stories blog into mobile web app or possibly an installable app.</p>
+                <h2>Botanics Nearby</h2>
+                <p>This app helps you explore some of the fascinating things that surround you on a visit to the <a href="http://www.rbge.org.uk">Royal Botanic Garden Edinburgh</a>.
+                    Simply click the "Nearby" button on the home screen and then maybe pick a topic of interest.
+                </p>
                 
-                <p>Contact <a href="mailto:r.hyam@rbge.org.uk">Roger Hyam</a> with enquiries.</p>
-            
-                <h3 id="nearby-heading">No support for heading</h3>
+                <p>Data is loaded over the internet so you need to have an active data connection for it to work. This can either be provided by your phone company or you can use our Wi-Fi network (Botanics Visitor) which is available in and near our public buildings.</p>
+                
+                <p>You should be aware that if you are not on our network <strong>you may be charged for data usage</strong> by your provider especially when listening to audio.</p>
+                
+                <p>When you are outdoors the app uses GPS to find your location. In some indoor locations it uses BlueTooth LE beacons to identify where you are. Your BlueTooth needs to be turned on for this to work.</p>
+                
+                <p><strong>Privacy</strong> In order for us to tell you what is around you we need to record your location but we do this entirely anonymously. Our servers record the location of a data request but not who makes the request.</p>
+                
+                <p>We really value your opinion. If you have any comments please contact <a href="mailto:r.hyam@rbge.org.uk">Roger Hyam</a>.</p>
+   
         </div>
     </div>
+    
+    <!--  T A G - L O C A T I O N - P A G E  -->
+   <div data-role="page" id="tag-page" data-theme="a" >
+       <div data-role="header" data-position="fixed" >
+           <a href="#index-page" data-transition="flip" data-icon="home" data-iconpos="left" class="ui-btn-left" >Home</a>
+           <h1>Tag Location</h1>
+           <a href="#tag-page-help" data-transition="pop" data-icon="info" data-iconpos="right" class="ui-btn-right" >Help</a>
+       </div><!-- /header -->
+       <div data-role="content" data-theme="a" >
+           <form id="tag-location-form" >
+               <ul data-role="listview" data-theme="b">
+                   <li>
+                       <label for="email" class="ui-hidden-accessible">Your email:</label>
+                       <input type="email" data-clear-btn="true" name="email" id="email" value="" placeholder="Your email" >
+                   </li>
+                   <li>
+                       <label for="memorable-word" class="ui-hidden-accessible">Memorable word:</label>
+                       <input type="text"  data-clear-btn="true" name="memorable-word" id="memorable-word" value="" placeholder="A memorable word">
+                   </li>
+                   <li>
+                       <label for="soothed-slider">How <strong>Soothed</strong> do you feel by here?</label>
+                       <input type="range" name="soothed-slider" id="soothed-slider" min="0" max="10" value="5" data-highlight="true" >
+                   </li>
+                   <li>
+                       <label for="anxious-slider">How <strong>Anxious</strong> do you feel by here?</label>
+                       <input type="range" name="anxious-slider" id="anxious-slider" min="0" max="10" value="5" data-highlight="true" >
+                   </li>
+                   <li>
+                       <label for="excited-slider">How <strong>Excited</strong> do you feel by here?<label>
+                       <input type="range" name="excited-slider" id="excited-slider" min="0" max="10" value="5" data-highlight="true" >
+                   </li>
+                   <li>
+                       <label for="comments" class="ui-hidden-accessible">Any comments:</label>
+                       <textarea cols="40" rows="8" name="comments" id="comments" placeholder="Anything else about this place?"></textarea>
+                   </li>
+                   <li>
+                       <div class="ui-grid-a">
+                           <div class="ui-block-a"><input id="nearby-tag-reset-btn" type="button" data-icon="delete" data-iconpos="right" value="Reset" data-theme="b"></div>
+                           <div class="ui-block-b"><input id="nearby-tag-save-btn" type="button" data-icon="check" data-iconpos="right" value="Submit" data-theme="a"></div>
+                       </div>
+                   </li>
+               </ul>
+           </form>
+       </div>
+   </div>
+
+   <!--  T A G - L O C A T I O N - P A G E - H E L P  -->
+   <div data-role="page" id="tag-page-help" data-dialog="true" data-close-btn="right" data-theme="a" >
+       <div data-role="header" data-position="fixed" >
+           <h1>Help</h1>
+       </div><!-- /header -->
+       <div data-role="content" data-theme="a" >
+           <h2>Tag Location</h2>
+           <p>You can help us map areas that are soothing and restorative by filling in this form.</p>
+           <p>The data will be used for our internal analysis only. If intend to use it for anything else in future we will email you for your permission first.</p>
+           <p>We ask for a memorable word along with your email address to detect people who may try and use other people's email addresses.
+               Please choose something you can remember but someone else is unlikely to guess.
+               Your phone will remember it so you don't have to fill it in every time.</p>
+            <a href="#tag-page" class="ui-btn ui-shadow ui-corner-all ui-btn-b"  data-icon="delete" data-iconpos="right"  >Close</a>
+       </div>
+   </div>
+
 
 
 </body>
