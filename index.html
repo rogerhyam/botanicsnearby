@@ -29,7 +29,8 @@
         <script src="js/jquery.mobile-1.4.5/jquery.mobile-1.4.5.min.js" type="text/javascript" charset="utf-8"></script>
         
         <!-- Google Maps -->
-        <script type='text/javascript' src='https://maps.googleapis.com/maps/api/js?key=AIzaSyDFhrG5sFcydNTBtXJES8zkKtGaimp7k5c'></script>
+        <!-- <script type='text/javascript' src='https://maps.googleapis.com/maps/api/js?key=AIzaSyDFhrG5sFcydNTBtXJES8zkKtGaimp7k5c'></script> -->
+        <script src="js/google_maps_load.js" type="text/javascript"></script>
         
         <!-- Application javascript -->
         <script src="js/main.js" type="text/javascript"></script>
@@ -67,8 +68,9 @@
                 <div class="ui-body ui-body-a">
                     <p><strong>Botanics Nearby</strong> will tell you what's around you whilst you're in the garden.</p>
                     <p>Tap the 'Nearby' button on the bottom right of this screen to load content for your current location.</p>
-                    <p>Once you have updated your location you can select a topic of that particularly interests you.</p>
+                    <p>Once you have updated your location you can select a topic that interests you.</p>
                     <p>To learn more about the app tap the 'About' button on the top left.</p>
+                    <p>Bear in mind that this app uses your phones data connection.</p>
                 </div>
             </div>
             
@@ -82,6 +84,19 @@
         </div><!-- /footer -->
     
     </div><!-- /page -->
+    
+    <!--  H O M E - P A G E - N O - C O N N E C T I O N -->
+    <div data-role="page" id="index-page-no-connection" data-dialog="true" data-close-btn="right" data-theme="a" >
+        <div data-role="header" data-position="fixed" >
+            <h1>Error</h1>
+        </div><!-- /header -->
+        <div data-role="content" data-theme="a" >
+            <h2>No Network Connection</h2>
+            <p>Sorry. There doesn't appear to be a network connection.</p>
+            <p>You need a data connection over WiFi or your cellular network to use this app.</p>
+            <a href="#index-page" class="ui-btn ui-shadow ui-corner-all ui-btn-b"  data-icon="delete" data-iconpos="right"  >Close</a>
+        </div>
+    </div>
 
 
     <!--  P O S T  P A G E   -->
@@ -104,7 +119,10 @@
         <h1>Map</h1>
             <a id="nearby-track-button" href="#" data-icon="navigation" data-iconpos="right"  >Track</a>
         </div>
-        <div role="main" class="ui-content" id="map-canvas">
+        <div role="main" class="ui-content" >
+            <div id="map-canvas">
+                
+            </div>
             <!-- map loads here... -->
         </div>
     </div>
@@ -194,6 +212,31 @@
                Please choose something you can remember but someone else is unlikely to guess.
                Your phone will remember it so you don't have to fill it in every time.</p>
             <a href="#tag-page" class="ui-btn ui-shadow ui-corner-all ui-btn-b"  data-icon="delete" data-iconpos="right"  >Close</a>
+       </div>
+   </div>
+   
+   <!--  T A G - L O C A T I O N - P A G E - T H A N K S -->
+   <div data-role="page" id="tag-page-thanks" data-dialog="true" data-close-btn="right" data-theme="a" >
+       <div data-role="header" data-position="fixed" >
+           <h1>Thanks</h1>
+       </div><!-- /header -->
+       <div data-role="content" data-theme="a" >
+           <h2>Thank You</h2>
+           <p>Many thanks for contributing to our knowledge of the environment and how we connect with it.</p>
+            <a href="#tag-page" class="ui-btn ui-shadow ui-corner-all ui-btn-b"  data-icon="delete" data-iconpos="right"  >Close</a>
+       </div>
+   </div>
+   
+   <!--  T A G - L O C A T I O N - P A G E - F A I L -->
+   <div data-role="page" id="tag-page-fail" data-dialog="true" data-close-btn="right" data-theme="a" >
+       <div data-role="header" data-position="fixed" >
+           <h1>Error</h1>
+       </div><!-- /header -->
+       <div data-role="content" data-theme="a" >
+           <h2>Upload failed</h2>
+           <p>There was a problem uploading your contribution to the server.</p>
+           <p>Do you have a network connection?</p>
+           <a href="#tag-page" class="ui-btn ui-shadow ui-corner-all ui-btn-b"  data-icon="delete" data-iconpos="right"  >Close</a>
        </div>
    </div>
 

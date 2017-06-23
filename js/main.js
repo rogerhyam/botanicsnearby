@@ -32,24 +32,6 @@ rbgeNearby.map_post_markers = new Array();
 rbgeNearby.map_person_marker = false;
 rbgeNearby.map_display_all = false; // whether map displays current marker or all available.
 
-rbgeNearby.person_icon_on = {  
-        path: google.maps.SymbolPath.CIRCLE,
-        fillColor: '#0000ff',
-        fillOpacity: 0.8,
-        strokeColor: '#0000ff',
-        strokeWeight: 3,
-        strokeOpacity: 0.8,
-        scale: 8
- }
-rbgeNearby.person_icon_off = {  
-         path: google.maps.SymbolPath.CIRCLE,
-         fillColor: '#0000ff',
-         fillOpacity: 0.1,
-         strokeColor: '#0000ff',
-         strokeWeight: 3,
-         strokeOpacity: 0.8,
-         scale: 8
-}
 rbgeNearby.track_person_icon_timer = false;
 rbgeNearby.track_watcher = false;
 rbgeNearby.track_timer = false;
@@ -74,6 +56,8 @@ $(document).on("pagecreate","#index-page",function(){
    
    // can't pick categories till we load something
    $('#nearby-cats-li').addClass('ui-disabled');
+   
+   $('#index-page-map-button').addClass('ui-disabled'); // will be re-enabled on list update
    
 });
 
@@ -190,6 +174,9 @@ $(document).on("pageshow","#map-page",function(){
     if(rbgeNearby.map_display_all) rbgeNearby.initMapForMultiplePosts();
     else rbgeNearby.initMapForPost();
     
+    // just to make sure the map renders right
+    google.maps.event.trigger(rbgeNearby.map, 'resize');
+    
 });
 
 $(document).on("pagehide","#map-page",function(){
@@ -211,6 +198,9 @@ $(document).on("pagebeforeshow","#tag-page",function(){
     $('#memorable-word').val(localStorage.getItem("memorable-word"));
 });
 
+$(document).on( "pagehide", "#tag-page-thanks", function() {
+    $( ":mobile-pagecontainer" ).pagecontainer( "change", "#index-page", { transition: "flip" } );
+});
 
 rbgeNearby.refresh = function(){
 
@@ -221,7 +211,15 @@ rbgeNearby.refresh = function(){
     $('#nearby-cats-li').addClass('ui-disabled'); 
     $('#nearby-cats-list').empty();
     $('#nearby-intro-block').hide();
-    $('#index-page-map-button').addClass('ui-disabled');
+    
+    $('#index-page-map-button').addClass('ui-disabled'); // will be re-enabled on list update
+    
+    // do nothing if we are on cordova and lack a connection
+    if(typeof cordova !== 'undefined' && navigator.connection.type === Connection.NONE){
+        $( ":mobile-pagecontainer" ).pagecontainer( "change", "#index-page-no-connection", { transition: "pop" } );
+        $('#nearby-refresh-button').removeClass('ui-disabled');
+        return;
+    }
     
     rbgeNearby.startBeaconScan();
     
@@ -367,6 +365,9 @@ rbgeNearby.loadCategories = function(){
                     li.addClass('nearby-cat-li');
                     li.on('click', function(event){
                         rbgeNearby.selectCategory($(this).data('nearby-cat-slug'));
+                        
+                        $('#index-page-map-button').addClass('ui-disabled'); // will be re-enabled on list update
+                        
                         rbgeNearby.loadDataGps();
                         if(rbgeNearby.beacon_current){
                             rbgeNearby.loadDataForBeacon(rbgeNearby.beacon_current);
@@ -508,6 +509,8 @@ rbgeNearby.initMapForMultiplePosts = function(){
     if(rbgeNearby.posts_data_gps.posts){
         for (var i=0; i <  rbgeNearby.posts_data_gps.posts.length; i++) {
             var post =  rbgeNearby.posts_data_gps.posts[i];
+            if(isNaN(post.latitude))  continue;
+            if(isNaN(post.longitude)) continue;
             var post_pos = new google.maps.LatLng(post.latitude, post.longitude);
             bounds.extend(post_pos);
             rbgeNearby.addMapPostMarker(post);
@@ -515,11 +518,14 @@ rbgeNearby.initMapForMultiplePosts = function(){
     }
     
     // FIXME - THIS NEEDS TO DETECT DUPLICATES IN BEACON AND GPS RESULTS
+    // or not bother because the markers will obscure one another...
     if(rbgeNearby.posts_data_beacon){
         for (var i=0; i <  rbgeNearby.posts_data_beacon.posts.length; i++) {
             var post =  rbgeNearby.posts_data_beacon.posts[i];
             if(post.latitude && post.longitude){
                 var post_pos = new google.maps.LatLng(post.latitude, post.longitude);
+                if(isNaN(post.latitude))  continue;
+                if(isNaN(post.longitude)) continue;
                 bounds.extend(post_pos);
                 rbgeNearby.addMapPostMarker(post);
             }
@@ -529,11 +535,15 @@ rbgeNearby.initMapForMultiplePosts = function(){
     // person marker position 
     rbgeNearby.setMapPersonMarker(person_pos);
     
-    // set the map bounds so we can see it all
-    rbgeNearby.map.fitBounds(bounds);
+    console.log(bounds.toString());
     
     // just to make sure the map renders right
     google.maps.event.trigger(rbgeNearby.map, 'resize');
+    
+    // set the map bounds so we can see it all
+    rbgeNearby.map.fitBounds(bounds);
+    rbgeNearby.map.panToBounds(bounds);
+    
     
     // start tracking if we are not
     rbgeNearby.toggleTracking();
@@ -632,6 +642,7 @@ rbgeNearby.updateDisplayGps = function(){
 
         var post =  rbgeNearby.posts_data_gps.posts[i];
         
+        // don't add it if it is already there.
         if($('*[data-nearby-post-id="'+ post.id +'"]').length > 0) continue;
 
         var li = $('<li></li>');
@@ -669,7 +680,7 @@ rbgeNearby.updateDisplayGps = function(){
         if(d > 0){
             
             bearing = rbgeNearby.getBearing(rbgeNearby.location_current.latitude, rbgeNearby.location_current.longitude, post.latitude, post.longitude );
-            if (bearing < 45) bearing = 'North'; 
+            if (bearing < 45) bearing = 'North';
             else if(bearing < 135) bearing = 'East';
             else if(bearing < 225) bearing = 'South';
             else if(bearing < 315) bearing = 'West';
@@ -677,13 +688,18 @@ rbgeNearby.updateDisplayGps = function(){
             
             // this is mapable so turn the mapping button on
             $('#index-page-map-button').removeClass('ui-disabled');
+            
+            var accuracy = Math.round(rbgeNearby.location_current.accuracy);
 
+            var p = $('<p>'+ d.toLocaleString() + ' ' + unit + ' ' + bearing +' (&#177; '+ accuracy.toLocaleString() + ' metres)</p>');
+            a.append(p);
+
+        }else{
+            var p = $('<p>Topic introduction</p>');
+            a.append(p);
         }
         
-        var accuracy = Math.round(rbgeNearby.location_current.accuracy);
         
-        var p = $('<p>'+ d.toLocaleString() + ' ' + unit + ' ' + bearing +' (&#177; '+ accuracy.toLocaleString() + ' metres)</p>');
-        a.append(p);
 
     
     }// end loop
@@ -744,7 +760,7 @@ rbgeNearby.processBeacons = function(){
     }
     beaconList.sort(function(beacon1, beacon2)
     {
-        return mapBeaconRSSI(beacon1.rssi) < mapBeaconRSSI(beacon2.rssi);
+        return rbgeNearby.mapBeaconRSSI(beacon1.rssi) < rbgeNearby.mapBeaconRSSI(beacon2.rssi);
     });
     
     // try loading the first in the list
@@ -753,11 +769,19 @@ rbgeNearby.processBeacons = function(){
         rbgeNearby.loadDataForBeacon(beaconList.shift());
     }else{
         // If we have no beacons we should display no posts from beacons
-        post_list.find('.nearby-post-beacon-li').remove();
+        $('#nearby-post-list').find('.nearby-post-beacon-li').remove();
+        $('#nearby-post-list').listview('refresh');
     }
     
     rbgeNearby.updateStatusMessage();
 
+}
+
+rbgeNearby.mapBeaconRSSI = function(rssi)
+{
+    if (rssi >= 0) return 1; // Unknown RSSI maps to 1.
+    if (rssi < -100) return 100; // Max RSSI
+    return 100 + rssi;
 }
 
 rbgeNearby.beaconFound = function(beacon){
@@ -840,6 +864,9 @@ rbgeNearby.updateDisplayBeacon = function(){
     for (var i = rbgeNearby.posts_data_beacon.posts.length - 1 ; i >= 0; i--) {
         
         var post =  rbgeNearby.posts_data_beacon.posts[i];
+        
+        // don't add it twice.
+        if($('*[data-nearby-post-id="'+ post.id +'"]').length > 0) continue;
 
         var li = $('<li></li>');
         li.data('nearby-post-index', i);
@@ -1099,15 +1126,15 @@ rbgeNearby.submitTagForm = function(){
 
     returnArray.beacon = rbgeNearby.beacon_current.name;
     
-    $.post(rbgeNearby.root_url + "wp-json/rbge_geo_tag/v1/tag", returnArray).done(
-    
-        function(data){alert(data), console.log(data)
-            
+    $.post(rbgeNearby.root_url + "wp-json/rbge_geo_tag/v1/tag", returnArray).done(function(data){
+        $( ":mobile-pagecontainer" ).pagecontainer( "change", "#tag-page-thanks", { transition: "pop" } );
+        console.log(data);
+    }).fail(function(error){
+        console.log(error)
+        $( ":mobile-pagecontainer" ).pagecontainer( "change", "#tag-page-fail", { transition: "pop" } );
     });
     
-    console.log(returnArray);
     
-    $( ":mobile-pagecontainer" ).pagecontainer( "change", "#index-page", { transition: "flip" } );
     
 }
 
