@@ -21,7 +21,8 @@
                 return;
         }
         
-        $.getScript('https://maps.googleapis.com/maps/api/js?key=AIzaSyDFhrG5sFcydNTBtXJES8zkKtGaimp7k5c&sensor=true&callback=onMapsApiLoaded');
+        // API key is in secrets.js
+        $.getScript('https://maps.googleapis.com/maps/api/js?key='+ rbgeNearby.google_maps_api_key +'&sensor=true&callback=onMapsApiLoaded');
         
     }
     
@@ -57,7 +58,7 @@
     
     // if no cordova just load it
     if(typeof global.cordova == 'undefined'){
-        $.getScript('https://maps.googleapis.com/maps/api/js?key=AIzaSyDFhrG5sFcydNTBtXJES8zkKtGaimp7k5c&sensor=true&callback=onMapsApiLoaded');
+        $.getScript('https://maps.googleapis.com/maps/api/js?key='+ rbgeNearby.google_maps_api_key +'&sensor=true&callback=onMapsApiLoaded');
     }
     
 })(window);

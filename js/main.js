@@ -1,12 +1,9 @@
 
-// namespace object
-var rbgeNearby = {};
-
 // two vars vary for dev
 var is_live = true;
 if(is_live){
     rbgeNearby.root_url = 'https://stories.rbge.org.uk/';
-    rbgeNearby.location_ok_accuracy = 200; // this will do to stop the retrieving location
+    rbgeNearby.location_ok_accuracy = 20; // this will do to stop the retrieving location
 }else{
     rbgeNearby.root_url = 'https://192.168.7.144/';
     rbgeNearby.location_ok_accuracy = 200; // this will do to stop the retrieving location
@@ -39,6 +36,8 @@ rbgeNearby.track_timer = false;
 rbgeNearby.beacons = {};
 rbgeNearby.beacon_current = false;
 rbgeNearby.beacon_found_timestamp = -1;
+
+rbgeNearby.last_location_submitted = false;
 
 /*
     Main index page where poi are listed.
@@ -618,11 +617,16 @@ rbgeNearby.loadDataGps = function(){
     
     console.log("load data GPS");
     
-    $.getJSON( rbgeNearby.root_url + "wp-json/rbge_geo_tag/v1/nearby?lat="+ rbgeNearby.location_current.latitude + "&lon="+ rbgeNearby.location_current.longitude +"&category=" + rbgeNearby.cat_current, function( data ) {
-        rbgeNearby.posts_data_gps = data;
-        rbgeNearby.google_api_key = data.meta.google_api_key;
-        rbgeNearby.updateDisplayGps();
-    });
+    $.getJSON( rbgeNearby.root_url + "wp-json/rbge_geo_tag/v1/nearby"
+        + "?lat=" + rbgeNearby.location_current.latitude
+        + "&lon=" + rbgeNearby.location_current.longitude 
+        + "&category=" + rbgeNearby.cat_current 
+        + "&key=" + rbgeNearby.rbge_api_key, 
+        function( data ) {
+            rbgeNearby.posts_data_gps = data;
+            rbgeNearby.updateDisplayGps();
+        }
+    );
     
     rbgeNearby.updateStatusMessage();
     
@@ -808,7 +812,10 @@ rbgeNearby.loadDataForBeacon = function(beacon){
     
     console.log(beacon.url);
     
-    $.getJSON( rbgeNearby.root_url + "wp-json/rbge_geo_tag/v1/beacon?beacon_uri="+ encodeURI(beacon.url) + "&category=" + rbgeNearby.cat_current,
+    $.getJSON( rbgeNearby.root_url + "wp-json/rbge_geo_tag/v1/beacon"
+        + "?beacon_uri=" + encodeURI(beacon.url) 
+        + "&category=" + rbgeNearby.cat_current
+        + "&key=" + rbgeNearby.rbge_api_key,
         function( data ) {
         
             // if the data was successfully pulled then we can load it
@@ -1089,6 +1096,12 @@ rbgeNearby.tagLocation = function(){
     // we do nothing if there is no location
     if(!rbgeNearby.location_current) return;
     
+    // if the current location is the same as the last location submitted we warn
+    if(rbgeNearby.last_location_submitted && rbgeNearby.last_location_submitted == rbgeNearby.location_current){
+        $( ":mobile-pagecontainer" ).pagecontainer( "change", "#tag-page-same-location", { transition: "pop" } );
+        return;
+    }
+    
     // we have a location so lets show them the location page.
     $( ":mobile-pagecontainer" ).pagecontainer( "change", "#tag-page", { transition: "flip" } );
     
@@ -1128,6 +1141,8 @@ rbgeNearby.submitTagForm = function(){
     
     $.post(rbgeNearby.root_url + "wp-json/rbge_geo_tag/v1/tag", returnArray).done(function(data){
         $( ":mobile-pagecontainer" ).pagecontainer( "change", "#tag-page-thanks", { transition: "pop" } );
+        rbgeNearby.last_location_submitted = rbgeNearby.location_current;
+        rbgeNearby.resetTagForm();
         console.log(data);
     }).fail(function(error){
         console.log(error)
