@@ -516,7 +516,7 @@ rbgeNearby.initMapForMultiplePosts = function(){
         }
     }
     
-    // FIXME - THIS NEEDS TO DETECT DUPLICATES IN BEACON AND GPS RESULTS
+    // Does this NEED TO DETECT DUPLICATES IN BEACON AND GPS RESULTS?
     // or not bother because the markers will obscure one another...
     if(rbgeNearby.posts_data_beacon){
         for (var i=0; i <  rbgeNearby.posts_data_beacon.posts.length; i++) {

@@ -18,6 +18,10 @@ cordova-plugin-media 3.0.1 "Media"
 
 cordova-plugin-network-information 1.3.3 "Network Information"
 
+cordova-plugin-settings-hook 0.2.4 "Cordova Settings Hooks"
+
 cordova-plugin-splashscreen 4.0.3 "Splashscreen"
+
+cordova-plugin-statusbar 2.2.3 "StatusBar"
 
 cordova-plugin-whitelist 1.3.2 "Whitelist"

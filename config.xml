@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
-<widget id="uk.org.rbge.hyam.botanicsnearby" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
-    <name>BotanicsNearby</name>
+<widget id="uk.org.rbge.hyam.botanicsnearby" version="1.0.1" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <name>Botanics Nearby</name>
     <description>
         A sample Apache Cordova application that responds to the deviceready event.
     </description>
@@ -37,6 +37,11 @@
     <platform name="ios">
         <allow-intent href="itms:*" />
         <allow-intent href="itms-apps:*" />
+        <config-file parent="NSBluetoothPeripheralUsageDescription" platform="ios" target="*-Info.plist">
+            <string>Botanics Nearby would like to use BlueTooth to scan for location beacons.</string>
+        </config-file>
+        <preference name="StatusBarOverlaysWebView" value="false" />
+        <preference name="StatusBarBackgroundColor" value="#000000" />
         <icon height="180" src="res/ios/icon-60@3x.png" width="180" />
         <icon height="60" src="res/ios/icon-60.png" width="60" />
         <icon height="120" src="res/ios/icon-60@2x.png" width="120" />
@@ -72,6 +77,8 @@
     <plugin name="cordova-plugin-geolocation" spec="^2.4.3" />
     <plugin name="cordova-plugin-media" spec="^3.0.1" />
     <plugin name="cordova-plugin-network-information" spec="^1.3.3" />
+    <plugin name="cordova-plugin-settings-hook" spec="^0.2.6" />
     <plugin name="cordova-plugin-splashscreen" spec="^4.0.3" />
+    <plugin name="cordova-plugin-statusbar" spec="^2.2.3" />
     <plugin name="cordova-plugin-whitelist" spec="^1.3.2" />
 </widget>
