@@ -1,6 +1,6 @@
 
 // two vars vary for dev
-var is_live = true;
+var is_live = false;
 if(is_live){
     rbgeNearby.root_url = 'https://stories.rbge.org.uk/';
     rbgeNearby.location_ok_accuracy = 20; // this will do to stop the retrieving location
@@ -9,10 +9,10 @@ if(is_live){
     rbgeNearby.location_ok_accuracy = 200; // this will do to stop the retrieving location
 }
 
-
 rbgeNearby.location_current = false;
 rbgeNearby.location_error = false;
 rbgeNearby.location_inaccurate = false;
+rbgeNearby.location_last_update = 0; // timestamp of when it was updated
 
 rbgeNearby.location_watcher = false; // the watcher reporting the location (when running)
 rbgeNearby.location_timer = false; // a timer that will stop the location_watcher after a set period
@@ -40,11 +40,10 @@ rbgeNearby.beacon_found_timestamp = -1;
 rbgeNearby.last_location_submitted = false;
 
 /*
-    Main index page where poi are listed.
+    Home page - Categories List
 */
-$(document).on("pagecreate","#index-page",function(){ 
+$(document).on("pagecreate","#cats-page",function(){ 
    
-   $('#nearby-refresh-button').on('click', rbgeNearby.refresh);
    
    $("#index-page-map-button").on('click', function(){
        rbgeNearby.map_display_all = true;
@@ -60,23 +59,55 @@ $(document).on("pagecreate","#index-page",function(){
    
 });
 
-$(document).on("pageshow","#index-page",function(){
+$(document).on("pageshow","#cats-page",function(){
+    
+    // FIXME: should we do this everytime?
+    // FIXM: WHAT IF NO CONNECTION FOUND
+    rbgeNearby.loadCategories();
     
     
-    if($('.nearby-post-gps-li').length == 0 && $('.nearby-post-beacon-li').length == 0){
-        $('#nearby-cats-li').addClass('ui-disabled');
-        $('#nearby-intro-block').show();
-    }else{
-        $('#nearby-cats-li').removeClass('ui-disabled');
-        $('#nearby-intro-block').hide();
-    }
+});
+
+/* 
+    Points Page List the points in this category
+*/
+
+$(document).on("pagecreate","#points-page",function(){ 
+   
+   $('#nearby-refresh-button').on('click', function(){rbgeNearby.updateLocation(true)});
+   $('#nearby-refresh-button').addClass('ui-disabled'); // enable it when needed
+   
+   $("#index-page-map-button").on('click', function(){
+       rbgeNearby.map_display_all = true;
+   });
+   
+   $('#index-page-map-button').addClass('ui-disabled'); // will be re-enabled on list update
+   
+   // listen to taps on the location message
+   // $('#nearby-status-message').on('click', rbgeNearby.tagLocation);
+   
+});
+
+$(document).on("pageshow","#points-page",function(){
+
+    // FIXME - we should have a check for stale i.e. not do it every time but after a few minutes?
+    rbgeNearby.loadDataGps(); // need to load what we have while we fetch location
+    rbgeNearby.updateLocation(true); // once location is known it will update display again.
     
-    // if we are showing the list forget the current post
-    rbgeNearby.post_current = false;
+    // the status message is visible so we start it updating
     rbgeNearby.updateStatusMessage();
     
 });
 
+$(document).on("pagehide","#points-page",function(){
+    
+    // stop the status message updating
+    if(rbgeNearby.status_message_timer){
+        clearTimeout(rbgeNearby.status_message_timer);
+        rbgeNearby.status_message_timer = false;
+    }
+    
+});
 
 $(document).on("pagecreate","#about-page",function(){ 
   
@@ -98,6 +129,8 @@ $(document).on("pagecreate","#post-page",function(){
 $(document).on("pagebeforeshow","#post-page",function(){
     
     var post = rbgeNearby.post_current;
+    
+    console.log(post);
 
     var pp = $('#nearby-post-page-content');
     pp.empty();
@@ -111,8 +144,33 @@ $(document).on("pagebeforeshow","#post-page",function(){
     h2.html(post.title);
     pp.append(h2);
     
+    var proximity = rbgeNearby.getDistanceFromLatLonInKm(
+        post.latitude,
+        post.longitude,
+        rbgeNearby.location_current.latitude,
+        rbgeNearby.location_current.longitude
+    );
+
+
+    // FIXME: WHAT IF THERE IS NO LOCATION YET? - STILL HIDE CONTENT!
+    proximity = Math.round(proximity * 1000);
+
+    // scan tags for "proximity-required-10m"
+    var proximity_message = false;
+    if(typeof post['tags'] != 'undefined'){
+        for (var i=0; i < post['tags'].length; i++) {
+            var tag = post['tags'][i];
+            var re = /Proximity Required ([0-9]+)m/i;
+            var m = tag.name.match(re);
+            if(m){
+                proximity_message = "<p>Sorry you must be within " + m[1] + "m of '" + post.title + "' to access this content.</p><p>You are currently " + proximity + "m away.</p><p>Use the map to navigate closer.</p>";
+                break;
+            }        
+        }
+    }
+    
     // mp3 player if we have mp3
-    if(post.mp3){
+    if(post.mp3 && !proximity_message){
         
         var wrapper = $('<div id="nearby-mp3-controls" ></div>');
         pp.append(wrapper);
@@ -139,7 +197,12 @@ $(document).on("pagebeforeshow","#post-page",function(){
     
     var div = $('<div></div>');
     div.addClass('nearby-post-text');
-    div.append(post.body);
+    if(proximity_message){
+        div.append(proximity_message);
+    }else{
+        div.append(post.body);
+    }
+    
     pp.append(div);
     
     pp.enhanceWithin();
@@ -182,36 +245,9 @@ $(document).on("pagehide","#map-page",function(){
     rbgeNearby.stopTracking();
 });
 
-
-/*
- -- tag page
-*/
-
-$(document).on( "pagecreate", "#tag-page", function() {
-    $('#nearby-tag-reset-btn').on('click', rbgeNearby.resetTagForm);
-    $('#nearby-tag-save-btn').on('click', rbgeNearby.submitTagForm);
-});
-
-$(document).on("pagebeforeshow","#tag-page",function(){
-    $('#email').val(localStorage.getItem("email"));
-    $('#memorable-word').val(localStorage.getItem("memorable-word"));
-});
-
-$(document).on( "pagehide", "#tag-page-thanks", function() {
-    $( ":mobile-pagecontainer" ).pagecontainer( "change", "#index-page", { transition: "flip" } );
-});
-
-rbgeNearby.refresh = function(){
-
-    // set up the display for refresh cycle
-    $('#nearby-refresh-button').addClass('ui-disabled');
-    $('#nearby-post-list').find('.nearby-post-gps-li').remove();
-    $('#nearby-post-list').find('.nearby-post-beacon-li').remove();
-    $('#nearby-cats-li').addClass('ui-disabled'); 
-    $('#nearby-cats-list').empty();
-    $('#nearby-intro-block').hide();
+rbgeNearby.updateLocation = function(refreshDisplay){
     
-    $('#index-page-map-button').addClass('ui-disabled'); // will be re-enabled on list update
+    console.log('updateLocation');
     
     // do nothing if we are on cordova and lack a connection
     if(typeof cordova !== 'undefined' && navigator.connection.type === Connection.NONE){
@@ -220,88 +256,92 @@ rbgeNearby.refresh = function(){
         return;
     }
     
-    rbgeNearby.startBeaconScan();
-    
-    // clear the last location
-    rbgeNearby.location_current = false;
-    
-    // double check a watcher isn't already there - or we will lose the handle to it.
-    if(rbgeNearby.location_watcher !== false){
-        navigator.geolocation.clearWatch(rbgeNearby.location_watcher);
-        rbgeNearby.location_watcher = false;
-    }
-    
-    rbgeNearby.updateStatusMessage();
-    
-    rbgeNearby.location_watcher = navigator.geolocation.watchPosition(
-
-                 // success
-                 function(position){
-
-                    // only do something if we are given a new position
-                    // if not keep watching
-                    if(
-                        rbgeNearby.location_current
-                        && rbgeNearby.location_current.longitude == position.coords.longitude
-                        && rbgeNearby.location_current.latitude == position.coords.latitude
-                        && rbgeNearby.location_current.accuracy == position.coords.accuracy
-                    ){
-                        return;
-                    }
-                    
-                     // got to here so it is useable.
-                     rbgeNearby.location_error = false;
-                     rbgeNearby.location_current = position.coords;
-
-                     // if we are less than Ym we can stop
-                     if (position.coords.accuracy < rbgeNearby.location_ok_accuracy){
-                         rbgeNearby.location_current = position.coords;
-                         rbgeNearby.location_inaccurate = false;
-                         rbgeNearby.stopGps();
-                         rbgeNearby.loadDataGps();
-                     }else{
-                         rbgeNearby.location_inaccurate = true;
-                     }
-
-                 },
-
-                 // outright failure!
-                 function(error){
-                     console.log(error);
-                     rbgeNearby.location_current = false;
-                     rbgeNearby.location_error = true;
-                     return;
-                 },
-
-                 // options
-                 {
-                   enableHighAccuracy: true, 
-                   maximumAge        : 10 * 1000, 
-                   timeout           : 10 * 1000
-                 }
-
-    );
-    
-    // we run the location for maximum of 20 secs
-    rbgeNearby.location_timer = setTimeout(function(){
-                console.log("firing location timeout");
-                rbgeNearby.location_timer = false;
-                rbgeNearby.stopGps();
-                rbgeNearby.loadDataGps();
-
-    }, 20 * 1000);
-    
-    // while we are calling the location we can update the categories
-    rbgeNearby.loadCategories();
-    
-    // keep track of the refresh - have we moved?
-    rbgeNearby.last_refresh = (new Date()).getTime();
-    
-    rbgeNearby.updateStatusMessage();
+    rbgeNearby.updateLocationGps(refreshDisplay);
+    rbgeNearby.updateLocationBeacon(refreshDisplay);
     
 }
 
+rbgeNearby.updateLocationGps = function(refreshDisplay){
+    
+    console.log('- updateLocationGps');
+
+     // double check a watcher isn't already there - or we will lose the handle to it.
+     if(rbgeNearby.location_watcher !== false){
+         navigator.geolocation.clearWatch(rbgeNearby.location_watcher);
+         rbgeNearby.location_watcher = false;
+     }
+
+     rbgeNearby.location_watcher = navigator.geolocation.watchPosition(
+
+                  // success
+                  function(position){
+
+                      console.log(position);
+                     // only do something if we are given a new position
+                     // if not keep watching
+                     if(
+                         rbgeNearby.location_current
+                         && rbgeNearby.location_current.longitude == position.coords.longitude
+                         && rbgeNearby.location_current.latitude == position.coords.latitude
+                         && rbgeNearby.location_current.accuracy == position.coords.accuracy
+                     ){
+                         console.log('same position');
+                         return;
+                     }
+
+                      // got to here so it is useable.
+                      rbgeNearby.location_error = false;
+                      rbgeNearby.location_current = position.coords;
+                      rbgeNearby.location_last_update = Date.now();
+
+                      // if we are less than Ym we can stop
+                      if (position.coords.accuracy < rbgeNearby.location_ok_accuracy){
+                          rbgeNearby.location_inaccurate = false;
+                          rbgeNearby.stopGps();
+                          if(refreshDisplay) rbgeNearby.loadDataGps();
+                      }else{
+                          console.log('location inaccurate');
+                          rbgeNearby.location_inaccurate = true;
+                      }
+
+                  },
+
+                  // outright failure!
+                  function(error){
+                      console.log(error);
+                      rbgeNearby.location_current = false;
+                      rbgeNearby.location_error = true;
+                      return;
+                  },
+
+                  // options
+                  {
+                    enableHighAccuracy: true, 
+                    maximumAge        : 10 * 1000, 
+                    timeout           : 10 * 1000
+                  }
+
+     );
+
+     // we run the location for maximum of 10 secs
+     rbgeNearby.location_timer = setTimeout(function(){
+                 console.log("firing location timeout");
+                 rbgeNearby.location_timer = false;
+                 rbgeNearby.stopGps();
+                 if(refreshDisplay) rbgeNearby.loadDataGps();
+
+     }, 10 * 1000);
+    
+}
+
+rbgeNearby.updateLocationBeacon = function(refreshDisplay){
+    rbgeNearby.startBeaconScan();
+}
+
+
 rbgeNearby.stopGps = function(){
+    
+    console.log('stopping gps');
     
     // stop the watcher if it is running
     if(rbgeNearby.location_watcher){
@@ -318,11 +358,14 @@ rbgeNearby.stopGps = function(){
     // enable the button again
     $('#nearby-refresh-button').removeClass('ui-disabled');
     
-    rbgeNearby.updateStatusMessage();
+    console.log(rbgeNearby.location_watcher);
+    console.log(rbgeNearby.location_timer);
 
 }
 
 rbgeNearby.loadCategories = function(){
+    
+    // FIXM: WHAT IF NO data FOUND - display nice message
     
     // get the root category first
     $.getJSON( rbgeNearby.root_url + "wp-json/wp/v2/categories?slug=nearby", function( parents ){
@@ -336,21 +379,6 @@ rbgeNearby.loadCategories = function(){
                 var cat_list = $('#nearby-cats-list');
                 cat_list.empty();
                 
-                // add one in for everything at the top
-                var li = $('<li></li>');
-                li.data('nearby-cat-slug', 'nearby');
-                li.data('nearby-cat-name', 'Select a topic');
-                li.addClass('nearby-cat-li');
-                li.on('click', function(event){
-                    rbgeNearby.selectCategory('nearby');
-                    rbgeNearby.loadDataGps();
-                    event.stopPropagation();
-                });
-                cat_list.append(li);
-                
-                var h2 = $('<h2>No specific topic</h2>');
-                li.append(h2);
-                
                 // add in all the child categories
                 for (var i=0; i < cats.length; i++) {
                                     
@@ -362,29 +390,34 @@ rbgeNearby.loadCategories = function(){
                     li.data('nearby-cat-slug', cat.slug);
                     li.data('nearby-cat-name', cat.name);
                     li.addClass('nearby-cat-li');
-                    li.on('click', function(event){
-                        rbgeNearby.selectCategory($(this).data('nearby-cat-slug'));
-                        
-                        $('#index-page-map-button').addClass('ui-disabled'); // will be re-enabled on list update
-                        
-                        rbgeNearby.loadDataGps();
-                        if(rbgeNearby.beacon_current){
-                            rbgeNearby.loadDataForBeacon(rbgeNearby.beacon_current);
-                        }
+                    
+                    var a = $('<a></a>');
+                    li.append(a);
+                    a.href
+                    a.attr('href', '#points-page');
+                    a.attr('data-transition', "slide");
+                    a.on('click', function(){
+                        console.log($(this).parent().data('nearby-cat-slug'));
+                        rbgeNearby.cat_current = $(this).parent().data('nearby-cat-slug');
                     });
+            
                     cat_list.append(li);
+                    
+                    var img = $('<img></img>');
+                    img.attr('src', cat.meta.cat_image_url);
+                    a.append(img);
 
                     var h2 = $('<h2>'+ cat.name + '</h2>');
-                    li.append(h2);
+                    a.append(h2);
               
                     var p = $('<p></p>');
-                    li.append(p);
+                    a.append(p);
                     p.html(cat.description);
                     
-                    p = $('<p></p>');
-                    li.append(p);
-                    p.html(cat.count + ' items in total');
-
+                    var span = $('<span class="ui-li-count"></span>');
+                    a.append(span);
+                    span.html(cat.count)
+                    
                     cat_list.listview('refresh');
                     $('#nearby-status-footer').show();
                 };
@@ -393,24 +426,6 @@ rbgeNearby.loadCategories = function(){
         }
         
     });
-    
-    rbgeNearby.selectCategory(rbgeNearby.cat_current);
-    
-    
-}
-
-rbgeNearby.selectCategory = function(slug){
-    
-    rbgeNearby.cat_current = slug;
-
-    // work through the displayed categories to find the title
-    $.each($('.nearby-cat-li'), function(i, val){
-        if($(val).data('nearby-cat-slug') == slug){
-            $('#span-cat-current').html($(val).data('nearby-cat-name'));
-        }
-    });
-    
-    $('#nearby-cats-li').collapsible( "collapse" );
     
 }
 
@@ -617,18 +632,29 @@ rbgeNearby.loadDataGps = function(){
     
     console.log("load data GPS");
     
-    $.getJSON( rbgeNearby.root_url + "wp-json/rbge_geo_tag/v1/nearby"
-        + "?lat=" + rbgeNearby.location_current.latitude
-        + "&lon=" + rbgeNearby.location_current.longitude 
-        + "&category=" + rbgeNearby.cat_current 
-        + "&key=" + rbgeNearby.rbge_api_key, 
+    // What if we don't have a location yet? What do we display.
+    // Lets arbitrarily default to Inverleith House.
+    var url;
+    if(typeof rbgeNearby.location_current.latitude == 'undefined' ){
+        url = rbgeNearby.root_url + "wp-json/rbge_geo_tag/v1/nearby"
+            + "?category=" + rbgeNearby.cat_current 
+            + "&lat=" + 55.9650178
+            + "&lon=" + -3.210175 
+            + "&key=" + rbgeNearby.rbge_api_key;
+    }else{
+        url = rbgeNearby.root_url + "wp-json/rbge_geo_tag/v1/nearby"
+            + "?category=" + rbgeNearby.cat_current 
+            + "&lat=" + rbgeNearby.location_current.latitude
+            + "&lon=" + rbgeNearby.location_current.longitude 
+            + "&key=" + rbgeNearby.rbge_api_key;
+    }
+
+    $.getJSON(url, 
         function( data ) {
             rbgeNearby.posts_data_gps = data;
             rbgeNearby.updateDisplayGps();
         }
     );
-    
-    rbgeNearby.updateStatusMessage();
     
 }
 
@@ -642,12 +668,16 @@ rbgeNearby.updateDisplayGps = function(){
     // clear out all the list items
     post_list.find('.nearby-post-gps-li').remove();
 
+    console.log( rbgeNearby.posts_data_gps.posts);
+
     for (var i=0; i <  rbgeNearby.posts_data_gps.posts.length; i++) {
 
         var post =  rbgeNearby.posts_data_gps.posts[i];
         
-        // don't add it if it is already there.
-        if($('*[data-nearby-post-id="'+ post.id +'"]').length > 0) continue;
+        // don't add it if it is already there via beacon
+        if($('*[data-nearby-post-id="'+ post.id +'"]').length > 0){
+            continue;
+        } 
 
         var li = $('<li></li>');
         li.data('nearby-post-index', i);
@@ -670,41 +700,8 @@ rbgeNearby.updateDisplayGps = function(){
 
         var h2 = $('<h2>'+ post.title   +'</h2>');
         a.append(h2);
-
-        if(post.distance > 1000){
-            var unit = 'km';
-            var d = Math.round(post.distance/1000);
-        }else{
-            var unit = 'metres';
-            var d = Math.round(post.distance);
-        }
         
-        // add in a direction
-        var bearing = ''
-        if(d > 0){
-            
-            bearing = rbgeNearby.getBearing(rbgeNearby.location_current.latitude, rbgeNearby.location_current.longitude, post.latitude, post.longitude );
-            if (bearing < 45) bearing = 'North';
-            else if(bearing < 135) bearing = 'East';
-            else if(bearing < 225) bearing = 'South';
-            else if(bearing < 315) bearing = 'West';
-            else bearing = 'North';
-            
-            // this is mapable so turn the mapping button on
-            $('#index-page-map-button').removeClass('ui-disabled');
-            
-            var accuracy = Math.round(rbgeNearby.location_current.accuracy);
-
-            var p = $('<p>'+ d.toLocaleString() + ' ' + unit + ' ' + bearing +' (&#177; '+ accuracy.toLocaleString() + ' metres)</p>');
-            a.append(p);
-
-        }else{
-            var p = $('<p>Topic introduction</p>');
-            a.append(p);
-        }
-        
-        
-
+        a.append(rbgeNearby.getDistanceP(post));
     
     }// end loop
    
@@ -712,9 +709,44 @@ rbgeNearby.updateDisplayGps = function(){
     
     // enable category picking again
     $('#nearby-cats-li').removeClass('ui-disabled');
-     $('#nearby-intro-block').hide();
     
-    rbgeNearby.updateStatusMessage();
+}
+
+rbgeNearby.getDistanceP = function(post){
+    
+    var p = $('<p></p>');
+    p.addClass('nearby-post-distance')
+    
+    var proximity = rbgeNearby.getDistanceFromLatLonInKm(
+        post.latitude,
+        post.longitude,
+        rbgeNearby.location_current.latitude,
+        rbgeNearby.location_current.longitude
+    );
+
+    if(Math.round(proximity) > 1){
+        var unit = 'km';
+        var d = Math.round(proximity);
+    }else{
+        var unit = 'metres';
+        var d = Math.round(proximity* 1000);
+    }
+    
+    // add in a direction
+    if(d > 0){
+        
+        // this is mapable so turn the mapping button on
+        $('#index-page-map-button').removeClass('ui-disabled');
+        
+        var accuracy = Math.round(rbgeNearby.location_current.accuracy);
+
+        p.html( d.toLocaleString() + ' ' + unit +' (&#177; '+ accuracy.toLocaleString() + ' metres) away' );
+
+    }else{
+       p.html('-');
+    }
+    
+    return p;
 }
 
 /* 
@@ -739,8 +771,6 @@ rbgeNearby.startBeaconScan = function(){
      rbgeNearby.beacon_timer = setTimeout(function(){
          rbgeNearby.stopBeaconScan();
      }, 30000);
-     
-     rbgeNearby.updateStatusMessage();
 
 }
 
@@ -750,7 +780,6 @@ rbgeNearby.stopBeaconScan = function(){
     clearTimeout(rbgeNearby.beacon_timer);
     rbgeNearby.beacon_timer = false;
     rbgeNearby.processBeacons();
-    rbgeNearby.updateStatusMessage();
 }
 
 rbgeNearby.processBeacons = function(){
@@ -777,8 +806,6 @@ rbgeNearby.processBeacons = function(){
         $('#nearby-post-list').listview('refresh');
     }
     
-    rbgeNearby.updateStatusMessage();
-
 }
 
 rbgeNearby.mapBeaconRSSI = function(rssi)
@@ -855,8 +882,6 @@ rbgeNearby.loadDataForBeacon = function(beacon){
         }
     );
     
-    rbgeNearby.updateStatusMessage();
-    
 }
 
 rbgeNearby.updateDisplayBeacon = function(){
@@ -911,9 +936,7 @@ rbgeNearby.updateDisplayBeacon = function(){
     
     // enable category picking again
     $('#nearby-cats-li').removeClass('ui-disabled');
-    $('#nearby-intro-block').hide();
     
-    rbgeNearby.updateStatusMessage();
 }
 
 /*
@@ -926,8 +949,6 @@ rbgeNearby.toggleTracking = function(){
     }else{
         rbgeNearby.stopTracking();
     }
-    
-    var on = false;
 
 }
 
@@ -946,6 +967,13 @@ rbgeNearby.startTracking = function(){
                      if(position.coords.accuracy < rbgeNearby.location_ok_accuracy){
                          var pos = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
                          rbgeNearby.map_person_marker.setPosition(pos);
+                         
+                         // we also now update our main location - why waste some gps data.
+                         // this also means we can do location sensitive data
+                         rbgeNearby.location_error = false;
+                         rbgeNearby.location_current = position.coords;
+                         rbgeNearby.location_last_update = Date.now();
+                         
                      }
                  },
                  // outright failure!
@@ -1088,149 +1116,72 @@ rbgeNearby.restartAudio = function(){
 }
 
 /*
-    ------ T A G G I N G - P L A C E -----------
-*/
-
-rbgeNearby.tagLocation = function(){
-    
-    // we do nothing if there is no location
-    if(!rbgeNearby.location_current) return;
-    
-    // if the current location is the same as the last location submitted we warn
-    if(rbgeNearby.last_location_submitted && rbgeNearby.last_location_submitted == rbgeNearby.location_current){
-        $( ":mobile-pagecontainer" ).pagecontainer( "change", "#tag-page-same-location", { transition: "pop" } );
-        return;
-    }
-    
-    // we have a location so lets show them the location page.
-    $( ":mobile-pagecontainer" ).pagecontainer( "change", "#tag-page", { transition: "flip" } );
-    
-    
-}
-
-rbgeNearby.resetTagForm = function(){
-    
-    $('#email').val(localStorage.getItem("email"));
-    $('#memorable-word').val(localStorage.getItem("memorable-word"));
-    $('#soothed-slider').val(5).slider("refresh");
-    $('#anxious-slider').val(5).slider("refresh");
-    $('#excited-slider').val(5).slider("refresh");
-    $('#comments').val('');
-    
-}
-
-rbgeNearby.submitTagForm = function(){
-    
-    // firstly save the persistent values save them reentering 
-    localStorage.setItem("email", $('#email').val());
-    localStorage.setItem("memorable-word", $('#memorable-word').val());
-    
-    // get a nice key:val array of the form
-    var formArray = $('#tag-location-form').serializeArray()
-    var returnArray = {};
-    for (var i = 0; i < formArray.length; i++){
-        returnArray[formArray[i]['name']] = formArray[i]['value'];
-    }
-    
-    returnArray.latitude = rbgeNearby.location_current.latitude;
-    returnArray.longitude = rbgeNearby.location_current.longitude;
-    returnArray.accuracy = rbgeNearby.location_current.accuracy;
-    returnArray.timestamp = Math.floor(Date.now());
-
-    returnArray.beacon = rbgeNearby.beacon_current.name;
-    
-    $.post(rbgeNearby.root_url + "wp-json/rbge_geo_tag/v1/tag", returnArray).done(function(data){
-        $( ":mobile-pagecontainer" ).pagecontainer( "change", "#tag-page-thanks", { transition: "pop" } );
-        rbgeNearby.last_location_submitted = rbgeNearby.location_current;
-        rbgeNearby.resetTagForm();
-        console.log(data);
-    }).fail(function(error){
-        console.log(error)
-        $( ":mobile-pagecontainer" ).pagecontainer( "change", "#tag-page-fail", { transition: "pop" } );
-    });
-    
-    
-    
-}
-
-rbgeNearby.compassHeading = function( alpha, beta, gamma ) {
-
-  var degtorad = Math.PI / 180; // Degree-to-Radian conversion
-
-  var _x = beta  ? beta  * degtorad : 0; // beta value
-  var _y = gamma ? gamma * degtorad : 0; // gamma value
-  var _z = alpha ? alpha * degtorad : 0; // alpha value
-
-  var cX = Math.cos( _x );
-  var cY = Math.cos( _y );
-  var cZ = Math.cos( _z );
-  var sX = Math.sin( _x );
-  var sY = Math.sin( _y );
-  var sZ = Math.sin( _z );
-
-  // Calculate Vx and Vy components
-  var Vx = - cZ * sY - sZ * sX * cY;
-  var Vy = - sZ * sY + cZ * sX * cY;
-
-  // Calculate compass heading
-  var compassHeading = Math.atan( Vx / Vy );
-
-  // Convert compass heading to use whole unit circle
-  if( Vy < 0 ) {
-    compassHeading += Math.PI;
-  } else if( Vx < 0 ) {
-    compassHeading += 2 * Math.PI;
-  }
-
-  return compassHeading * ( 180 / Math.PI ); // Compass Heading (in degrees)
-
-}
-
-/*
     Called after things happen
     It has to work out a relevant message to display
 */
 rbgeNearby.updateStatusMessage = function(){
     
+   // console.log('updateStatusMessage');
+    
+    // call this again in a 0.5 seconds
+    rbgeNearby.status_message_timer = setTimeout(function(){
+        rbgeNearby.updateStatusMessage();
+    }, 500);
+
     // if the beacon timer is running we display loading beacon
     if(rbgeNearby.beacon_timer){
-        var m = "Scanning for Bluetooth beacons";
-        if(rbgeNearby.location_timer) m = m + "<br/>and fetching current location";
+        var m = "Scanning BlueTooth";
+        if(rbgeNearby.location_timer) m = m + " &amp; GPS";
         $('#nearby-status-message').html(m);
+        $('#nearby-status-message').css('color', 'white');
+        $('#nearby-refresh-button').addClass('ui-disabled');
         return;
     }
     
     // if the gps timer is running we display looking for gps
     if(rbgeNearby.location_timer){
-        $('#nearby-status-message').html("Fetching current location");
+        $('#nearby-status-message').html("Scanning GPS");
+        $('#nearby-status-message').css('color', 'white');
+        $('#nearby-refresh-button').addClass('ui-disabled');
         return;
     }
     
-    // if we have an active beacon then we display its name and location (if there is one)
-    if(rbgeNearby.beacon_current){
-        var m = rbgeNearby.beacon_current.name;
-        if(rbgeNearby.location_current){
-            m = m + '<br/>' + rbgeNearby.getPrettyCoords(rbgeNearby.location_current);
-        }        
-        $('#nearby-status-message').html(m);
-        return;
-    }
     
-    // if we just have a GPS location we display that (with a warning for distance)
+    // if neither are running we display the time last update time
     if(rbgeNearby.location_current){
-        var m = rbgeNearby.getPrettyCoords(rbgeNearby.location_current);   
-        if(rbgeNearby.location_current.accuracy >= 50){
-            m = m + '<br/><strong>Warning: Location imprecise</strong>'; 
-        }else{
-            m = m + "<br/>Tap 'Nearby' to update location"; 
+    
+        //console.log(rbgeNearby.location_current);
+        
+        var millis = Date.now() - rbgeNearby.location_last_update;
+        var mins = Math.floor( (millis/1000)/60  );
+        
+        if(mins == 0){
+            $('#nearby-status-message').html("Location up to date");
+            $('#nearby-status-message').css('color', 'white');
+            $('#nearby-refresh-button').addClass('ui-disabled');
         }
-        $('#nearby-status-message').html(m);
-        return;
+        
+        if(mins == 1){
+            $('#nearby-status-message').html('Location updated 1 minute ago');
+            $('#nearby-status-message').css('color', 'white');
+            $('#nearby-refresh-button').removeClass('ui-disabled');
+        }
+        
+        if(mins > 1){
+            $('#nearby-status-message').html('Location updated ' + mins + ' minutes ago');
+            $('#nearby-refresh-button').removeClass('ui-disabled');
+        }
+        
+        if(mins > 2){
+            $('#nearby-status-message').css('color', 'orange');
+        }
+        
+    }else{
+        $('#nearby-status-message').html("No location set.");
+        $('#nearby-status-message').css('color', 'orange');
+        $('#nearby-refresh-button').removeClass('ui-disabled');
     }
     
-    // otherwise we display the default
-    $('#nearby-status-message').html("Tap the 'Nearby' to learn more about what is around you.");
-
 }
 
 rbgeNearby.getPrettyCoords = function(location){
@@ -1246,4 +1197,22 @@ rbgeNearby.getPrettyCoords = function(location){
     return m;
     
 }
+
+rbgeNearby.getDistanceFromLatLonInKm = function(lat1, lon1, lat2, lon2){
+    var R = 6371; // Radius of the earth in km
+    var dLat = rbgeNearby.deg2rad(lat2-lat1);  // deg2rad below
+    var dLon = rbgeNearby.deg2rad(lon2-lon1); 
+    var a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(rbgeNearby.deg2rad(lat1)) * Math.cos(rbgeNearby.deg2rad(lat2)) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2); 
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+    var d = R * c; // Distance in km
+    return d;
+}
+
+rbgeNearby.deg2rad = function(deg) {
+  return deg * (Math.PI/180)
+}
+
 

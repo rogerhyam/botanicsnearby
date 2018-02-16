@@ -25,3 +25,4 @@ cordova-plugin-splashscreen 4.0.3 "Splashscreen"
 cordova-plugin-statusbar 2.2.3 "StatusBar"
 
 cordova-plugin-whitelist 1.3.2 "Whitelist"
+
