@@ -44,26 +44,34 @@ rbgeNearby.last_location_submitted = false;
 */
 $(document).on("pagecreate","#cats-page",function(){ 
    
-   
-   $("#index-page-map-button").on('click', function(){
+
+   $("#cats-page-map-button").on('click', function(){
        rbgeNearby.map_display_all = true;
    });
+
+   // will be re-enabled when we know we have a location
+   $('#cats-page-map-button').addClass('ui-disabled');
    
-   // listen to taps on the location message
-   $('#nearby-status-message').on('click', rbgeNearby.tagLocation);
-   
-   // can't pick categories till we load something
-   $('#nearby-cats-li').addClass('ui-disabled');
-   
-   $('#index-page-map-button').addClass('ui-disabled'); // will be re-enabled on list update
-   
+
 });
 
 $(document).on("pageshow","#cats-page",function(){
     
     // FIXME: should we do this everytime?
     // FIXM: WHAT IF NO CONNECTION FOUND
-    rbgeNearby.loadCategories();
+    rbgeNearby.loadCategories();   
+    
+    // if we have a person location then we can enable the map button
+    if(rbgeNearby.location_current && rbgeNearby.location_current.latitude && rbgeNearby.location_current.longitude){
+        $('#cats-page-map-button').removeClass('ui-disabled'); 
+    }
+    
+    // we forget the posts we may have loaded with a topic
+    rbgeNearby.posts_data_gps = false;
+    rbgeNearby.posts_data_beacon = false;
+    
+    // start looking for a location
+    rbgeNearby.updateLocation(false);
     
     
 });
@@ -96,7 +104,7 @@ $(document).on("pageshow","#points-page",function(){
     
     // the status message is visible so we start it updating
     rbgeNearby.updateStatusMessage();
-    
+
 });
 
 $(document).on("pagehide","#points-page",function(){
@@ -293,6 +301,7 @@ rbgeNearby.updateLocationGps = function(refreshDisplay){
                       rbgeNearby.location_error = false;
                       rbgeNearby.location_current = position.coords;
                       rbgeNearby.location_last_update = Date.now();
+                      $('#cats-page-map-button').removeClass('ui-disabled');                       
 
                       // if we are less than Ym we can stop
                       if (position.coords.accuracy < rbgeNearby.location_ok_accuracy){
@@ -310,6 +319,7 @@ rbgeNearby.updateLocationGps = function(refreshDisplay){
                   function(error){
                       console.log(error);
                       rbgeNearby.location_current = false;
+                      $('#cats-page-map-button').addClass('ui-disabled');
                       rbgeNearby.location_error = true;
                       return;
                   },
@@ -399,6 +409,7 @@ rbgeNearby.loadCategories = function(){
                     a.on('click', function(){
                         console.log($(this).parent().data('nearby-cat-slug'));
                         rbgeNearby.cat_current = $(this).parent().data('nearby-cat-slug');
+                        $("#points-page h1").html($(this).parent().data('nearby-cat-name'));                        
                     });
             
                     cat_list.append(li);
@@ -430,6 +441,15 @@ rbgeNearby.loadCategories = function(){
 }
 
 rbgeNearby.initMapForPost = function(){
+    
+    console.log(rbgeNearby.location_current);
+    
+    // we should never get here without a current location but if we do then the app may well hang
+    // so this is a safetynet 
+    if(!rbgeNearby.location_current || !rbgeNearby.location_current.latitude || !rbgeNearby.location_current.longitude){
+           alert('Location Error');
+           return;
+    }
     
     var post_pos = new google.maps.LatLng(rbgeNearby.post_current.latitude, rbgeNearby.post_current.longitude);
     var person_pos = new google.maps.LatLng(rbgeNearby.location_current.latitude, rbgeNearby.location_current.longitude);
@@ -498,10 +518,21 @@ rbgeNearby.initMapForPost = function(){
 
 rbgeNearby.initMapForMultiplePosts = function(){
     
+    console.log(rbgeNearby.location_current);
+    
+    // we should never get here without a current location but if we do then the app may well hang
+    // so this is a safetynet 
+    if(!rbgeNearby.location_current || !rbgeNearby.location_current.latitude || !rbgeNearby.location_current.longitude){
+           alert('Location Error');
+           return;
+    }
+    
     var bounds = new google.maps.LatLngBounds();
     
     var person_pos = new google.maps.LatLng(rbgeNearby.location_current.latitude, rbgeNearby.location_current.longitude);
     bounds.extend(person_pos);
+    
+    console.log(person_pos);
     
     // initial center is person - we change this later
     var options = {
@@ -517,10 +548,12 @@ rbgeNearby.initMapForMultiplePosts = function(){
         rbgeNearby.map.setOptions(options);
     }
     
+    console.log(rbgeNearby.map);
+    
     // add markers for all the gps posts we have
     rbgeNearby.clearMapPostMarkers();
     
-    if(rbgeNearby.posts_data_gps.posts){
+    if(rbgeNearby.posts_data_gps && rbgeNearby.posts_data_gps.posts){
         for (var i=0; i <  rbgeNearby.posts_data_gps.posts.length; i++) {
             var post =  rbgeNearby.posts_data_gps.posts[i];
             if(isNaN(post.latitude))  continue;
@@ -533,7 +566,7 @@ rbgeNearby.initMapForMultiplePosts = function(){
     
     // Does this NEED TO DETECT DUPLICATES IN BEACON AND GPS RESULTS?
     // or not bother because the markers will obscure one another...
-    if(rbgeNearby.posts_data_beacon){
+    if(rbgeNearby.posts_data_beacon && rbgeNearby.posts_data_gps.posts){
         for (var i=0; i <  rbgeNearby.posts_data_beacon.posts.length; i++) {
             var post =  rbgeNearby.posts_data_beacon.posts[i];
             if(post.latitude && post.longitude){
@@ -549,15 +582,15 @@ rbgeNearby.initMapForMultiplePosts = function(){
     // person marker position 
     rbgeNearby.setMapPersonMarker(person_pos);
     
-    console.log(bounds.toString());
-    
     // just to make sure the map renders right
     google.maps.event.trigger(rbgeNearby.map, 'resize');
-    
-    // set the map bounds so we can see it all
-    rbgeNearby.map.fitBounds(bounds);
-    rbgeNearby.map.panToBounds(bounds);
-    
+       
+    // if we have added no markers (except the person) then the bounds 
+    // will be tiny so leave the zoom level as default and don't zoom to the bounds
+    if(rbgeNearby.map_post_markers && rbgeNearby.map_post_markers.length > 0){
+        rbgeNearby.map.fitBounds(bounds);
+        rbgeNearby.map.panToBounds(bounds);
+    }
     
     // start tracking if we are not
     rbgeNearby.toggleTracking();
@@ -669,7 +702,7 @@ rbgeNearby.updateDisplayGps = function(){
     post_list.find('.nearby-post-gps-li').remove();
 
     console.log( rbgeNearby.posts_data_gps.posts);
-
+    
     for (var i=0; i <  rbgeNearby.posts_data_gps.posts.length; i++) {
 
         var post =  rbgeNearby.posts_data_gps.posts[i];
@@ -1020,7 +1053,7 @@ rbgeNearby.stopTracking = function(){
     // cancel the icon blink
     clearTimeout(rbgeNearby.track_person_icon_timer);
     rbgeNearby.track_person_icon_timer = false;
-    rbgeNearby.map_person_marker.setOptions({icon: rbgeNearby.person_icon_on});
+    if(rbgeNearby.map_person_marker) rbgeNearby.map_person_marker.setOptions({icon: rbgeNearby.person_icon_on});
     
     // stop tracking
     navigator.geolocation.clearWatch(rbgeNearby.track_watcher);

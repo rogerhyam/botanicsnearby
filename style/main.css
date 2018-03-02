@@ -99,4 +99,21 @@
     border-bottom-right-radius: inherit;
     border-top-width: 0;
 }
-    
+h1{
+    white-space: normal !important;
+}
+
+#about-page > div.ui-content.ui-body-a{
+    padding: 0px;
+}
+
+.banner-image{
+    width: 100%;
+
+}
+
+.about-text{
+    padding-left: 1em;
+    padding-right: 1em;
+    padding-bottom: 1em;
+}
