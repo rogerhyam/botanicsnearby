@@ -1,6 +1,6 @@
 
 // two vars vary for dev
-var is_live = false;
+var is_live = true;
 if(is_live){
     rbgeNearby.root_url = 'https://stories.rbge.org.uk/';
     rbgeNearby.location_ok_accuracy = 20; // this will do to stop the retrieving location
@@ -39,6 +39,36 @@ rbgeNearby.beacon_found_timestamp = -1;
 
 rbgeNearby.last_location_submitted = false;
 
+rbgeNearby.cordova_ready = false;
+
+rbgeNearby.media_player = false;
+
+/*
+    Mother of events for cordova to check everything is loaded
+*/
+document.addEventListener("deviceready", function(){
+    
+    console.log('device ready');
+    
+    rbgeNearby.cordova_ready = true;
+    
+    // first thing we do is check where we are
+    rbgeNearby.updateLocation(true);
+    
+}, false);
+
+/*
+    When we come back from a nap
+*/
+document.addEventListener("resume", function(){
+    // setTimeout is for iOS bug
+    setTimeout(function() {
+        // update the location because the could have moved
+        rbgeNearby.updateLocation(true);
+    }, 0);
+}, false);
+
+
 /*
     Home page - Categories List
 */
@@ -57,13 +87,18 @@ $(document).on("pagecreate","#cats-page",function(){
 
 $(document).on("pageshow","#cats-page",function(){
     
-    // FIXME: should we do this everytime?
-    // FIXM: WHAT IF NO CONNECTION FOUND
+    //console.log("show cats page");
+    
     rbgeNearby.loadCategories();   
     
+    if(typeof google === 'undefined') console.log("google is undefined!");
+    
+    
     // if we have a person location then we can enable the map button
-    if(rbgeNearby.location_current && rbgeNearby.location_current.latitude && rbgeNearby.location_current.longitude){
+    if(typeof google != 'undefined' && rbgeNearby.location_current && rbgeNearby.location_current.latitude && rbgeNearby.location_current.longitude){
         $('#cats-page-map-button').removeClass('ui-disabled'); 
+    }else{
+        $('#cats-page-map-button').addClass('ui-disabled'); 
     }
     
     // we forget the posts we may have loaded with a topic
@@ -72,9 +107,10 @@ $(document).on("pageshow","#cats-page",function(){
     
     // start looking for a location
     rbgeNearby.updateLocation(false);
-    
+    //console.log('page show..');
     
 });
+
 
 /* 
     Points Page List the points in this category
@@ -98,7 +134,6 @@ $(document).on("pagecreate","#points-page",function(){
 
 $(document).on("pageshow","#points-page",function(){
 
-    // FIXME - we should have a check for stale i.e. not do it every time but after a few minutes?
     rbgeNearby.loadDataGps(); // need to load what we have while we fetch location
     rbgeNearby.updateLocation(true); // once location is known it will update display again.
     
@@ -138,7 +173,7 @@ $(document).on("pagebeforeshow","#post-page",function(){
     
     var post = rbgeNearby.post_current;
     
-    console.log(post);
+    //console.log(post);
 
     var pp = $('#nearby-post-page-content');
     pp.empty();
@@ -159,8 +194,6 @@ $(document).on("pagebeforeshow","#post-page",function(){
         rbgeNearby.location_current.longitude
     );
 
-
-    // FIXME: WHAT IF THERE IS NO LOCATION YET? - STILL HIDE CONTENT!
     proximity = Math.round(proximity * 1000);
 
     // scan tags for "proximity-required-10m"
@@ -257,90 +290,104 @@ rbgeNearby.updateLocation = function(refreshDisplay){
     
     console.log('updateLocation');
     
-    // do nothing if we are on cordova and lack a connection
-    if(typeof cordova !== 'undefined' && navigator.connection.type === Connection.NONE){
-        $( ":mobile-pagecontainer" ).pagecontainer( "change", "#index-page-no-connection", { transition: "pop" } );
-        $('#nearby-refresh-button').removeClass('ui-disabled');
-        return;
+    // are we on cordova?
+    if(typeof cordova !== 'undefined'){
+        
+        // are we fully loaded
+        if(!rbgeNearby.cordova_ready){
+            //console.log('cordova not loaded yet');
+            return;
+        }
+        
+        // we have cordova so kick off a beacon search
+        rbgeNearby.updateLocationBeacon(refreshDisplay);
+        
     }
     
+    // we got this far so we can update the GPS
     rbgeNearby.updateLocationGps(refreshDisplay);
-    rbgeNearby.updateLocationBeacon(refreshDisplay);
-    
+        
 }
 
 rbgeNearby.updateLocationGps = function(refreshDisplay){
     
     console.log('- updateLocationGps');
 
-     // double check a watcher isn't already there - or we will lose the handle to it.
-     if(rbgeNearby.location_watcher !== false){
-         navigator.geolocation.clearWatch(rbgeNearby.location_watcher);
-         rbgeNearby.location_watcher = false;
-     }
+     // only ever create a new one if the old one is set to false
+     if(rbgeNearby.location_watcher === false){
 
-     rbgeNearby.location_watcher = navigator.geolocation.watchPosition(
+             rbgeNearby.location_watcher = navigator.geolocation.watchPosition(
 
-                  // success
-                  function(position){
+                          // success
+                          function(position){
+                              console.log('success being called');
+                    
+                             // only do something if we are given a new position
+                             // if not keep watching
+                             if(
+                                 rbgeNearby.location_current
+                                 && rbgeNearby.location_current.longitude == position.coords.longitude
+                                 && rbgeNearby.location_current.latitude == position.coords.latitude
+                                 && rbgeNearby.location_current.accuracy == position.coords.accuracy
+                             ){
+                                 return;
+                             }
 
-                      console.log(position);
-                     // only do something if we are given a new position
-                     // if not keep watching
-                     if(
-                         rbgeNearby.location_current
-                         && rbgeNearby.location_current.longitude == position.coords.longitude
-                         && rbgeNearby.location_current.latitude == position.coords.latitude
-                         && rbgeNearby.location_current.accuracy == position.coords.accuracy
-                     ){
-                         console.log('same position');
-                         return;
-                     }
+                              // got to here so it is useable.
+                              rbgeNearby.location_error = false;
+                              rbgeNearby.location_current = position.coords;
+                              rbgeNearby.location_last_update = Date.now();
+                              if(typeof google != 'undefined') $('#cats-page-map-button').removeClass('ui-disabled');                       
 
-                      // got to here so it is useable.
-                      rbgeNearby.location_error = false;
-                      rbgeNearby.location_current = position.coords;
-                      rbgeNearby.location_last_update = Date.now();
-                      $('#cats-page-map-button').removeClass('ui-disabled');                       
+                              // if we are less than Ym we can stop
+                              if (position.coords.accuracy < rbgeNearby.location_ok_accuracy){
+                                  rbgeNearby.location_inaccurate = false;
+                                  rbgeNearby.stopGps();
+                                  if(refreshDisplay) rbgeNearby.loadDataGps();
+                              }else{
+                                  console.log('location inaccurate');
+                                  rbgeNearby.location_inaccurate = true;
+                              }
 
-                      // if we are less than Ym we can stop
-                      if (position.coords.accuracy < rbgeNearby.location_ok_accuracy){
-                          rbgeNearby.location_inaccurate = false;
-                          rbgeNearby.stopGps();
-                          if(refreshDisplay) rbgeNearby.loadDataGps();
-                      }else{
-                          console.log('location inaccurate');
-                          rbgeNearby.location_inaccurate = true;
-                      }
+                          },
 
-                  },
+                          // outright failure!
+                          function(error){
+                              console.log(error);
+                              rbgeNearby.location_current = false;
+                              $('#cats-page-map-button').addClass('ui-disabled');
+                              rbgeNearby.location_error = true;
+                              return;
+                          },
 
-                  // outright failure!
-                  function(error){
-                      console.log(error);
-                      rbgeNearby.location_current = false;
-                      $('#cats-page-map-button').addClass('ui-disabled');
-                      rbgeNearby.location_error = true;
-                      return;
-                  },
+                          // options
+                          {
+                            enableHighAccuracy: true, 
+                            maximumAge        : 10 * 1000, 
+                            timeout           : 10 * 1000
+                          }
 
-                  // options
-                  {
-                    enableHighAccuracy: true, 
-                    maximumAge        : 10 * 1000, 
-                    timeout           : 10 * 1000
-                  }
+             );
+     
+             
+            // we run the location for maximum of 10 secs
+           
+            rbgeNearby.location_timer = setTimeout(function(){
+                      console.log("firing location timeout");
 
-     );
+                      console.log("killing this one it");
+                      console.log(rbgeNearby.location_watcher);
+                      navigator.geolocation.clearWatch(rbgeNearby.location_watcher);
+                      rbgeNearby.location_watcher = false;
 
-     // we run the location for maximum of 10 secs
-     rbgeNearby.location_timer = setTimeout(function(){
-                 console.log("firing location timeout");
-                 rbgeNearby.location_timer = false;
-                 rbgeNearby.stopGps();
-                 if(refreshDisplay) rbgeNearby.loadDataGps();
+                      rbgeNearby.stopGps();
+                      if(refreshDisplay) rbgeNearby.loadDataGps();
 
-     }, 10 * 1000);
+            }, 10 * 1000);
+       
+             
+     } // end test for watcher
+     
     
 }
 
@@ -350,11 +397,10 @@ rbgeNearby.updateLocationBeacon = function(refreshDisplay){
 
 
 rbgeNearby.stopGps = function(){
-    
-    console.log('stopping gps');
-    
+            
     // stop the watcher if it is running
     if(rbgeNearby.location_watcher){
+        //console.log(rbgeNearby.location_watcher)
         navigator.geolocation.clearWatch(rbgeNearby.location_watcher);
         rbgeNearby.location_watcher = false;
     }
@@ -367,15 +413,16 @@ rbgeNearby.stopGps = function(){
     
     // enable the button again
     $('#nearby-refresh-button').removeClass('ui-disabled');
-    
-    console.log(rbgeNearby.location_watcher);
-    console.log(rbgeNearby.location_timer);
 
 }
 
 rbgeNearby.loadCategories = function(){
     
-    // FIXM: WHAT IF NO data FOUND - display nice message
+    // Firstly we warn if there isn't a data connection
+    if(rbgeNearby.cordova_ready && navigator.connection.type === Connection.NONE){
+        alert('Warning: There is no data connection.');
+        return;
+    }
     
     // get the root category first
     $.getJSON( rbgeNearby.root_url + "wp-json/wp/v2/categories?slug=nearby", function( parents ){
@@ -407,7 +454,7 @@ rbgeNearby.loadCategories = function(){
                     a.attr('href', '#points-page');
                     a.attr('data-transition', "slide");
                     a.on('click', function(){
-                        console.log($(this).parent().data('nearby-cat-slug'));
+                        //console.log($(this).parent().data('nearby-cat-slug'));
                         rbgeNearby.cat_current = $(this).parent().data('nearby-cat-slug');
                         $("#points-page h1").html($(this).parent().data('nearby-cat-name'));                        
                     });
@@ -442,7 +489,7 @@ rbgeNearby.loadCategories = function(){
 
 rbgeNearby.initMapForPost = function(){
     
-    console.log(rbgeNearby.location_current);
+    //console.log(rbgeNearby.location_current);
     
     // we should never get here without a current location but if we do then the app may well hang
     // so this is a safetynet 
@@ -460,7 +507,7 @@ rbgeNearby.initMapForPost = function(){
         mapTypeId: google.maps.MapTypeId.ROADMAP
     };
     
-    console.log(options);
+    //console.log(options);
     
     // create the map if we need one
     if(!rbgeNearby.map){
@@ -518,7 +565,7 @@ rbgeNearby.initMapForPost = function(){
 
 rbgeNearby.initMapForMultiplePosts = function(){
     
-    console.log(rbgeNearby.location_current);
+    //console.log(rbgeNearby.location_current);
     
     // we should never get here without a current location but if we do then the app may well hang
     // so this is a safetynet 
@@ -532,7 +579,7 @@ rbgeNearby.initMapForMultiplePosts = function(){
     var person_pos = new google.maps.LatLng(rbgeNearby.location_current.latitude, rbgeNearby.location_current.longitude);
     bounds.extend(person_pos);
     
-    console.log(person_pos);
+    //console.log(person_pos);
     
     // initial center is person - we change this later
     var options = {
@@ -548,7 +595,7 @@ rbgeNearby.initMapForMultiplePosts = function(){
         rbgeNearby.map.setOptions(options);
     }
     
-    console.log(rbgeNearby.map);
+    //console.log(rbgeNearby.map);
     
     // add markers for all the gps posts we have
     rbgeNearby.clearMapPostMarkers();
@@ -627,7 +674,7 @@ rbgeNearby.addMapPostMarker = function(post){
     
     marker.addListener('click', function() {
         
-        console.log(this['nearby_post']);
+        //console.log(this['nearby_post']);
         
         // set it as the current post
         rbgeNearby.post_current = this['nearby_post'];
@@ -701,7 +748,7 @@ rbgeNearby.updateDisplayGps = function(){
     // clear out all the list items
     post_list.find('.nearby-post-gps-li').remove();
 
-    console.log( rbgeNearby.posts_data_gps.posts);
+    //console.log( rbgeNearby.posts_data_gps.posts);
     
     for (var i=0; i <  rbgeNearby.posts_data_gps.posts.length; i++) {
 
@@ -895,6 +942,7 @@ rbgeNearby.loadDataForBeacon = function(beacon){
                 if(data.meta.centroid){
                     
                     // if the gps is still running stop it.
+                    console.log('got beacon centroid');
                     rbgeNearby.stopGps();
                     
                     rbgeNearby.location_current = data.meta.centroid;
@@ -1101,51 +1149,172 @@ rbgeNearby.toggleAudio = function(){
 
 
 rbgeNearby.startAudio = function(){
-   
-    $('#nearby-audio')[0].play();
-    
+
     // set the started flag
     $('#nearby-audio').data('playing', true);
-    
+
     // set the ui state to playing
     $('#nearby-audio-start-btn').removeClass('ui-icon-audio').addClass('ui-icon-minus');
     $('#nearby-audio-start-btn').html('Stop');
+
+    if(rbgeNearby.cordova_ready){
+       rbgeNearby.startAudioApp();
+    }else{
+       rbgeNearby.startAudioWeb();
+    }
+    
+}
+
+rbgeNearby.startAudioWeb = function(){
+    $('#nearby-audio')[0].play();
+}
+
+rbgeNearby.startAudioApp = function(){
+    
+    // never start a new player without destroying the old one
+    if(rbgeNearby.mediaPlayer !== false){
+        rbgeNearby.stopAudioApp();
+    }
+    
+    // create a media player
+    rbgeNearby.mediaPlayer = new Media(
+        $('#nearby-audio').attr('src'), 
+        rbgeNearby.audioSuccess,
+        rbgeNearby.audioError,
+        rbgeNearby.audioStatus
+    );
+    
+    rbgeNearby.mediaPlayer.play({ playAudioWhenScreenIsLocked : true });
+    myMedia.setVolume('1.0');
+    
+}
+
+rbgeNearby.audioSuccess = function(){
+    console.log('audio success')
+}
+
+rbgeNearby.audioError = function(err){
+    console.log(err);
+}
+
+rbgeNearby.audioStatus = function(status){
+    
+    // we watch for the status to reach 4 - meaning it has stopped at the end of the stream
+    // then we kill the player and reset the UI.
+    console.log(status);
+    if(status == 4){
+        rbgeNearby.stopAudio();
+    }
     
 }
 
 rbgeNearby.pauseAudio = function(){
-    
-    $('#nearby-audio')[0].pause();
-    
+
     // set the stop
     $('#nearby-audio').data('playing', false);
 
     // set the ui state to stopped
     $('#nearby-audio-start-btn').removeClass('ui-icon-minus').addClass('ui-icon-audio');
     $('#nearby-audio-start-btn').html('Start');
+        
+    if(rbgeNearby.cordova_ready){
+        rbgeNearby.pauseAudioApp();
+    }else{
+        rbgeNearby.pauseAudioWeb();
+    }
     
 }
 
-rbgeNearby.stopAudio = function(){
+rbgeNearby.pauseAudioWeb = function(){
     $('#nearby-audio')[0].pause();
+}
+
+rbgeNearby.pauseAudioApp = function(){
+    if(rbgeNearby.mediaPlayer){
+        rbgeNearby.mediaPlayer.pause();
+    }
+}
+
+rbgeNearby.stopAudio = function(){
+    
+    // pause it first to update the UI
+    rbgeNearby.pauseAudio();
+
+    // actually stop the player
+    if(rbgeNearby.cordova_ready){
+        rbgeNearby.stopAudioApp();
+    }else{
+        rbgeNearby.stopAudioWeb();
+    }
+    
     $('#nearby-audio').data('playing', false);
+}
+
+rbgeNearby.stopAudioWeb = function(){
+    $('#nearby-audio')[0].pause();
+}
+
+rbgeNearby.stopAudioApp = function(){
+    if(rbgeNearby.mediaPlayer){
+        rbgeNearby.mediaPlayer.stop();
+        rbgeNearby.mediaPlayer.release();
+        rbgeNearby.mediaPlayer = false;
+    }
 }
 
 rbgeNearby.skipBackAudio = function(){
     
     $('#nearby-audio-back-btn').blur();
     
+    if(rbgeNearby.cordova_ready){
+        rbgeNearby.skipBackAudioApp();
+    }else{
+        rbgeNearby.skipBackAudioWeb();
+    }
+    
+}
+
+rbgeNearby.skipBackAudioWeb = function(){
     if($('#nearby-audio')[0].currentTime > 20){
         $('#nearby-audio')[0].currentTime = $('#nearby-audio')[0].currentTime - 20;
     }else{
         $('#nearby-audio')[0].currentTime = 0;
     }
-    
+}
+
+rbgeNearby.skipBackAudioApp = function(){
+    if(rbgeNearby.mediaPlayer){
+        rbgeNearby.mediaPlayer.getCurrentPosition(function(current_sec){
+            if(current_sec > 20){
+                rbgeNearby.mediaPlayer.seekTo((current_sec - 20) * 1000);
+            }else{
+                rbgeNearby.mediaPlayer.seekTo(1); // one 
+            }
+        });
+    }
 }
 
 rbgeNearby.restartAudio = function(){
+    
     $('#nearby-audio-restart-btn').blur();
+    
+    if(rbgeNearby.cordova_ready){
+        rbgeNearby.restartAudioApp();
+    }else{
+        rbgeNearby.restartAudioWeb();
+    }
+    
+}
+
+
+rbgeNearby.restartAudioWeb = function(){
     $('#nearby-audio')[0].currentTime = 0;
+}
+
+rbgeNearby.restartAudioApp = function(){
+    if(rbgeNearby.mediaPlayer){
+        rbgeNearby.mediaPlayer.seekTo(1);
+    }
 }
 
 /*
@@ -1160,6 +1329,14 @@ rbgeNearby.updateStatusMessage = function(){
     rbgeNearby.status_message_timer = setTimeout(function(){
         rbgeNearby.updateStatusMessage();
     }, 500);
+
+    // Firstly we warn if there isn't a data connection
+    if(rbgeNearby.cordova_ready && navigator.connection.type === Connection.NONE){
+        $('#nearby-status-message').html("No data connection!");
+        $('#nearby-refresh-button').addClass('ui-disabled');
+        $('#nearby-status-message').css('color', 'orange');
+        return;
+    }
 
     // if the beacon timer is running we display loading beacon
     if(rbgeNearby.beacon_timer){

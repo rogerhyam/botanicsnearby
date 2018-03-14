@@ -26,3 +26,12 @@ cordova-plugin-statusbar 2.2.3 "StatusBar"
 
 cordova-plugin-whitelist 1.3.2 "Whitelist"
 
+
+## We use this utility to keep the plugins up to date
+
+npm install -g cordova-check-plugins
+
+cordova-check-plugins --update=auto
+
+## Build for publication
+
